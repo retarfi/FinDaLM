@@ -1,0 +1,30 @@
+[tool.poetry]
+name = "FinDaLM"
+version = "0.0.1"
+description = ""
+authors = ["Masahiro Suzuki <msuzuki9609@gmail.com>"]
+license = "MIT"
+readme = "README.md"
+
+[tool.poetry.dependencies]
+python = "^3.9"
+transformers = "^4.38.2"
+accelerate = "^0.28.0"
+sentencepiece = "^0.2.0"
+datasets = "^2.18.0"
+torch = "^2.2.1"
+wheel = "^0.43.0"
+# Should be installed with `poetry run pip install flash-attn --no-build-isolation`
+# flash-attn = "^2.5.6"
+evaluate = "^0.4.1"
+
+
+
+[tool.poetry.group.dev.dependencies]
+black = "^24.2.0"
+pytest = "^8.1.1"
+pytest-cov = "^4.1.0"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
