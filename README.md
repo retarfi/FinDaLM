@@ -61,7 +61,7 @@ poetry run python -m findalm.train.pretrain \
 
 # For Llama
 poetry run python -m findalm.train.pretrain \
---model_type llama-2 \
+--model_type llama \
 --pretrained_model_name_or_dir model-name-or-directory \
 --dataset_names materials/dataset/baz \
 --validation_split_size 10 \

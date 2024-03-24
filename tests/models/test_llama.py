@@ -1,4 +1,4 @@
-from findalm.llama2 import add_pad_token, set_pad_token_to_model
+from findalm.models.llama import add_pad_token, set_pad_token_to_model
 from transformers import LlamaForCausalLM, LlamaTokenizerFast
 
 LLAMA_MODEL_NAME: str = "HuggingFaceM4/tiny-random-LlamaForCausalLM"

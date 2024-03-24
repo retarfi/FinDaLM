@@ -2,19 +2,23 @@ from contextlib import AbstractContextManager
 from contextlib import nullcontext as does_not_raise
 
 import pytest
-from findalm.pretrain.models import from_pretrained_with_modelforpretraining
+from findalm.models import from_pretrained_with_modelforpretraining
+
+from .. import MAP_TEST_MODELS
 
 
 @pytest.mark.parametrize(
     "model_type,model_name_or_path,expectation",
     [
+        (model, model_path, does_not_raise())
+        for model, model_path in MAP_TEST_MODELS.items()
+    ]
+    + [
         (
-            "deberta-v2",
-            "hf-internal-testing/tiny-random-DebertaForMaskedLM",
-            does_not_raise(),
-        ),
-        ("llama-2", "HuggingFaceM4/tiny-random-LlamaForCausalLM", does_not_raise()),
-        ("roberta", "FacebookAI/roberta-base", pytest.raises(ValueError)),
+            "electra",
+            "hf-internal-testing/tiny-random-ElectraForMaskedLM",
+            pytest.raises(ValueError),
+        )
     ],
 )
 def test_from_pretrained_with_modelforpretraining(

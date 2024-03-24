@@ -7,13 +7,10 @@ from unittest.mock import patch
 import pytest
 from findalm.pretrain.train import main
 
+from .. import MAP_TEST_MODELS
+
 THIS_DIR: str = os.path.dirname(os.path.abspath(__file__))
 MAX_LENGTH: int = 64
-
-MAP_TEST_MODELS: dict[str, str] = {
-    "deberta-v2": "hf-internal-testing/tiny-random-DebertaForMaskedLM",
-    "llama-2": "HuggingFaceM4/tiny-random-LlamaForCausalLM",
-}
 
 
 @pytest.mark.parametrize(
@@ -22,9 +19,11 @@ MAP_TEST_MODELS: dict[str, str] = {
         ("deberta-v2", ""),  # model,mask
         ("deberta-v2", "--is_dataset_masked"),  # model
         ("deberta-v2", "--is_dataset_masked --do_eval"),  # do_eval
-        ("llama-2", ""),  # model
-        ("llama-2", "--do_eval"),  # do_eval
-        ("llama-2", "--do_eval --prediction_loss_only"),  # do_eval,prediction_loss_only
+        ("llama", ""),  # model
+        ("llama", "--do_eval"),  # do_eval
+        ("llama", "--do_eval --prediction_loss_only"),  # do_eval,prediction_loss_only
+        ("roberta", ""),
+        ("t5", ""),
     ],
 )
 def test_main(model_type: str, args: str) -> None:

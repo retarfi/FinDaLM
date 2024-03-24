@@ -8,7 +8,7 @@ from unittest.mock import patch
 import pytest
 import torch
 from datasets import Dataset
-from findalm.llama2 import add_pad_token
+from findalm.models.llama import add_pad_token
 from findalm.pretrain.dataset.create import (
     apply_masking,
     convert_batchencoding_to_dict_and_pad,
@@ -20,21 +20,19 @@ from findalm.pretrain.dataset.create import (
 )
 from transformers import AutoTokenizer, BatchEncoding, PreTrainedTokenizer
 
+from ... import MAP_TEST_MODELS
+
 P_THIS_DIR: Path = Path(os.path.dirname(os.path.abspath(__file__)))
 P_TEST_ROOT_DIR: Path = P_THIS_DIR.parent.parent
-MAP_TEST_MODELS: dict[str, str] = {
-    "deberta-v2": "hf-internal-testing/tiny-random-DebertaForMaskedLM",
-    "llama-2": "HuggingFaceM4/tiny-random-LlamaForCausalLM",
-}
 TOKENIZERS: dict[str, PreTrainedTokenizer] = dict(
     map(lambda x: (x[0], AutoTokenizer.from_pretrained(x[1])), MAP_TEST_MODELS.items())
 )
-add_pad_token(TOKENIZERS["llama-2"])
+add_pad_token(TOKENIZERS["llama"])
 
 
 @pytest.fixture(name="tokenizer_and_sent_to_ids")
 def fixture_tokenizer_and_sent_to_ids() -> tuple[PreTrainedTokenizer, OrderedDict]:
-    tokenizer: PreTrainedTokenizer = TOKENIZERS["llama-2"]
+    tokenizer: PreTrainedTokenizer = TOKENIZERS["llama"]
     ordct: OrderedDict[str, list[int]] = collections.OrderedDict(
         [
             ("I am a cat.", [306, 626, 263, 6635, 29889]),
@@ -73,7 +71,7 @@ def test_convert_sentence_to_ids(
             TOKENIZERS["deberta-v2"],
             [[1, 7, 8, 9, 2], [1, 10, 11, 12, 2], [1, 13, 14, 15, 2]],
         ),
-        (TOKENIZERS["llama-2"], [[1, 7, 8, 9, 10], [1, 11, 12, 13, 14]]),
+        (TOKENIZERS["llama"], [[1, 7, 8, 9, 10], [1, 11, 12, 13, 14]]),
     ],
 )
 def test_create_examples_from_batch(
@@ -96,7 +94,7 @@ def test_create_examples_from_batch(
             TOKENIZERS["deberta-v2"],
             [[1, 7, 8, 9, 2], [1, 10, 11, 12, 2], [1, 13, 14, 15, 2]],
         ),
-        (TOKENIZERS["llama-2"], [[1, 7, 8, 9, 10], [1, 11, 12, 13, 14]]),
+        (TOKENIZERS["llama"], [[1, 7, 8, 9, 10], [1, 11, 12, 13, 14]]),
     ],
 )
 def test_create_examples_from_document(
@@ -135,7 +133,7 @@ def test_create_examples_from_document(
             {"input_ids": [10, 11, 12, 0, 0], "attention_mask": [1, 1, 1, 0, 0]},
         ),
         (
-            TOKENIZERS["llama-2"],
+            TOKENIZERS["llama"],
             {
                 "input_ids": [32000, 32000, 10, 11, 12],
                 "attention_mask": [0, 0, 1, 1, 1],
@@ -191,7 +189,9 @@ def test_apply_masking(cache_file_name: Optional[str], num_proc: Optional[int]) 
 @pytest.mark.parametrize(
     "model_type,do_mask,cache_file_name,num_proc",
     [
-        ("llama-2", False, None, None),
+        ("llama", False, None, None),
+        ("roberta", False, None, None),
+        ("t5", False, None, None),
         ("deberta-v2", True, None, None),
         (
             "deberta-v2",

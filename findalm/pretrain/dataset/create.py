@@ -14,7 +14,7 @@ from transformers import (
 )
 
 from ... import get_logger
-from ...llama2 import add_pad_token
+from ...models.llama import add_pad_token
 from .load import load_ds
 
 logger: logging.Logger = get_logger()
