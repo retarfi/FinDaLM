@@ -26,9 +26,12 @@ from transformers.data.data_collator import (
 from transformers.trainer_utils import get_last_checkpoint
 
 from .. import get_logger
+from ..models.base import (
+    MAP_MODELFORPRETRAINING,
+    from_pretrained_with_modelforpretraining,
+)
 from .configuration_utils import ProfilerCallback
 from .dataset import load_ds
-from ..models import MAP_MODELFORPRETRAINING, from_pretrained_with_modelforpretraining
 
 logger = get_logger()
 

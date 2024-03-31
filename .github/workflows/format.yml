@@ -1,5 +1,6 @@
 name: Format
 on:
+  push:
   workflow_dispatch:
 
 jobs:

@@ -92,6 +92,17 @@ tensorboard --logdir materials/profile
 とすればtensorboardでprofileが見れる。
 
 
+### Evaluation
+```sh
+poetryt run python -m findalm.eval.eval \
+<task> \
+-m <model_name_or_directory> \
+-a <accumulation_steps> \
+--seed 0 \
+(--mlflow) \
+(--grid)
+```
+
 
 ### Test
 ```sh

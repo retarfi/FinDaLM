@@ -219,7 +219,7 @@ def test_main(
     if do_mask:
         output_dir += "_mask"
     args_fixed: list[str] = [
-        "test_create.py",
+        __file__,
         "--input_datasets",
         str(P_TEST_ROOT_DIR / "data" / "datasets" / "botchan"),
         "--output_dir",

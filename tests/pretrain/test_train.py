@@ -9,6 +9,7 @@ from findalm.pretrain.train import main
 
 from .. import MAP_TEST_MODELS
 
+os.environ["WANDB_MODE"] = "offline"
 THIS_DIR: str = os.path.dirname(os.path.abspath(__file__))
 MAX_LENGTH: int = 64
 
