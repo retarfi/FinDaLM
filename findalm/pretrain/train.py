@@ -1,6 +1,7 @@
 import os
 from dataclasses import dataclass, field
-from typing import Callable, Optional, Union
+from enum import Enum
+from typing import Callable, Literal, Optional, Union
 
 import datasets
 import evaluate
@@ -32,10 +33,18 @@ from ..models.base import (
 )
 from .configuration_utils import ProfilerCallback
 from .dataset import load_ds
+from .moe import freeze_except_mlp
 
 logger = get_logger()
 
 # This files mainly relies on transformers/examples/pytorch/language-modeling/run_clm.py
+
+
+class PretrainMode(Enum):
+    DEFAULT = "default"
+    MOE_STAGE1 = "moe-stage1"
+    MOE_STAGE2 = "moe-stage2"
+    SIMILARITY = "similarity"
 
 
 @dataclass
@@ -44,6 +53,9 @@ class ModelArguments:
     Arguments pertaining to which model/config/tokenizer we are going to fine-tune.
     """
 
+    pretrain_mode: Literal["default", "moe-stage1", "moe-stage2", "similarity"] = (
+        field()
+    )
     model_type: str = field(
         metadata={
             "help": "Model type from the list: "
@@ -135,6 +147,9 @@ def main() -> None:
         (ModelArguments, DataTrainingArguments, TrainingArguments)
     )
     model_args, data_args, training_args = parser.parse_args_into_dataclasses()
+    pretrain_mode: PretrainMode = PretrainMode[
+        dict([(x.value, x.name) for x in PretrainMode])[model_args.pretrain_mode]
+    ]
 
     # global variables
     ram_gb: float = psutil.virtual_memory().available / 1073741824
@@ -198,6 +213,8 @@ def main() -> None:
     model: PreTrainedModel = from_pretrained_with_modelforpretraining(
         model_args.model_type, model_args.pretrained_model_name_or_dir, config=config
     )
+    if pretrain_mode == PretrainMode.MOE_STAGE1:
+        freeze_except_mlp(model)
 
     lm_type: str = MAP_MODELFORPRETRAINING[model_args.model_type].lm_type
     n_params = sum({p.data_ptr(): p.numel() for p in model.parameters()}.values())

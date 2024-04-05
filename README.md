@@ -106,8 +106,6 @@ poetryt run python -m findalm.eval.eval \
 
 ### Test
 ```sh
-# Normal pytest (shorter time consume)
-poetry run pytest
 # Do whole tests including model forwarding with GPU and avoid using wandb
 CUDA_VISIBLE_DEVICES=0 WANDB_DISABLED=true RUN_SLOW=true poetry run pytest
 

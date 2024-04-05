@@ -5,6 +5,7 @@ from contextlib import nullcontext as does_not_raise
 from unittest.mock import patch
 
 import pytest
+
 from findalm.pretrain.train import main
 
 from .. import MAP_TEST_MODELS
@@ -34,6 +35,8 @@ def test_main(model_type: str, args: str) -> None:
     )
 
     args_fixed: list[str] = [
+        "--pretrain_mode",
+        "default",
         "--model_type",
         model_type,
         "--pretrained_model_name_or_dir",
@@ -80,6 +83,8 @@ def test_resume_from_checkpoint(
     # dataset must be created in test_main()
 
     args_fixed: list[str] = [
+        "--pretrain_mode",
+        "default",
         "--model_type",
         model_type,
         "--pretrained_model_name_or_dir",
