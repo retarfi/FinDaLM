@@ -250,6 +250,7 @@ def main() -> None:
     # model
     model: PreTrainedModel
     if pretrain_mode == PretrainMode.MOE_STAGE2:
+        assert model_args.moe_type is not None
         if model_args.model_type == "deberta-v2":
             torch_dtype: Optional[torch.dtype] = None
             if training_args.bf16:
