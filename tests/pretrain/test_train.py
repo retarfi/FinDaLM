@@ -16,19 +16,24 @@ MAX_LENGTH: int = 64
 
 
 @pytest.mark.parametrize(
-    "model_type,args",
+    "pretrain_mode,model_type,args",
     [
-        ("deberta-v2", ""),  # model,mask
-        ("deberta-v2", "--is_dataset_masked"),  # model
-        ("deberta-v2", "--is_dataset_masked --do_eval"),  # do_eval
-        ("llama", ""),  # model
-        ("llama", "--do_eval"),  # do_eval
-        ("llama", "--do_eval --prediction_loss_only"),  # do_eval,prediction_loss_only
-        ("roberta", ""),
-        ("t5", ""),
+        ("moe-stage1", "deberta-v2", ""),
+        ("default", "deberta-v2", ""),  # model,mask
+        ("default", "deberta-v2", "--is_dataset_masked"),  # model
+        ("default", "deberta-v2", "--is_dataset_masked --do_eval"),  # do_eval
+        ("default", "llama", ""),  # model
+        ("default", "llama", "--do_eval"),  # do_eval
+        (
+            "default",
+            "llama",
+            "--do_eval --prediction_loss_only",
+        ),  # do_eval,prediction_loss_only
+        ("default", "roberta", ""),
+        ("default", "t5", ""),
     ],
 )
-def test_main(model_type: str, args: str) -> None:
+def test_main(pretrain_mode: str, model_type: str, args: str) -> None:
     postfix_mask: str = "_mask" if "--is_dataset_masked" in args else ""
     dataset_dir: str = os.path.join(
         THIS_DIR, "../data/materials/datasets/", model_type + postfix_mask
@@ -36,13 +41,15 @@ def test_main(model_type: str, args: str) -> None:
 
     args_fixed: list[str] = [
         "--pretrain_mode",
-        "default",
+        pretrain_mode,
         "--model_type",
         model_type,
         "--pretrained_model_name_or_dir",
         MAP_TEST_MODELS[model_type],
         "--dataset_names",
         dataset_dir,
+        "--validation_split_size",
+        "100",
         "--output_dir",
         os.path.join(THIS_DIR, "../data/materials/model", model_type),
         "--overwrite_output_dir",
@@ -57,6 +64,8 @@ def test_main(model_type: str, args: str) -> None:
         "42",
         "--bf16",
     ]
+    if args:
+        args_fixed.extend(args.split(" "))
     with patch.object(sys, "argv", ["test_pretrain.py"] + args_fixed):
         main()
 
@@ -118,3 +127,43 @@ def test_resume_from_checkpoint(
     with expectation:
         with patch.object(sys, "argv", ["test_pretrain.py"] + args_fixed):
             main()
+
+
+@pytest.mark.parametrize(
+    "model_type,dataset_names,moe_type",
+    [
+        ("deberta-v2", "finerord", "top2-skip"),
+        ("deberta-v2", "fiqasa", "top2"),
+        ("deberta-v2", "fomc", "top1"),
+        ("deberta-v2", "ner", "top1"),
+        ("deberta-v2", "headline-price", "dense"),
+    ],
+)
+def test_main_moe_stage2(model_type: str, dataset_names: str, moe_type: str) -> None:
+    args_fixed: list[str] = [
+        "--pretrain_mode",
+        "moe-stage2",
+        "--model_type",
+        model_type,
+        "--pretrained_model_name_or_dir",
+        *[MAP_TEST_MODELS[model_type]] * 2,
+        "--moe_type",
+        moe_type,
+        "--dataset_names",
+        dataset_names,
+        "--output_dir",
+        os.path.join(THIS_DIR, "../data/materials/model", f"moe-{model_type}"),
+        "--overwrite_output_dir",
+        "--do_train",
+        "--max_steps",
+        "1",
+        "--save_steps",
+        "5",
+        "--seed",
+        "42",
+        "--data_seed",
+        "42",
+        "--bf16",
+    ]
+    with patch.object(sys, "argv", ["test_pretrain.py"] + args_fixed):
+        main()

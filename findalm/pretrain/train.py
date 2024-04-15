@@ -27,13 +27,20 @@ from transformers.data.data_collator import (
 from transformers.trainer_utils import get_last_checkpoint
 
 from .. import get_logger
+from ..eval.eval import TASKS, load_datasetdict
 from ..models.base import (
     MAP_MODELFORPRETRAINING,
     from_pretrained_with_modelforpretraining,
 )
+from ..models.moe.base import MOE_TYPES
+from ..models.moe.deberta_v2 import (
+    DebertaV2MoEForMaskedLM,
+    load_pretrained_deberta_v2_into_moe,
+)
 from .configuration_utils import ProfilerCallback
 from .dataset import load_ds
-from .moe import freeze_except_mlp
+from .dataset.create import convert_sentence_to_ids, create_examples_from_document
+from .moe import freeze_except_mlp, freeze_except_router
 
 logger = get_logger()
 
@@ -53,8 +60,8 @@ class ModelArguments:
     Arguments pertaining to which model/config/tokenizer we are going to fine-tune.
     """
 
-    pretrain_mode: Literal["default", "moe-stage1", "moe-stage2", "similarity"] = (
-        field()
+    pretrain_mode: Literal["default", "moe-stage1", "moe-stage2", "similarity"] = field(
+        metadata={"help": "Choose from: " + ",".join([x.value for x in PretrainMode])}
     )
     model_type: str = field(
         metadata={
@@ -62,8 +69,18 @@ class ModelArguments:
             + ", ".join(MAP_MODELFORPRETRAINING.keys())
         }
     )
-    pretrained_model_name_or_dir: str = field(
-        metadata={"help": "Pretrained model name or directory"}
+    pretrained_model_name_or_dir: list[str] = field(
+        metadata={"help": "Pretrained model names or directories"}
+    )
+    moe_type: Optional[str] = field(
+        default=None,
+        metadata={
+            "help": (
+                "Adaptation ways of Experts if pretrain_mode is moe-stage2. "
+                "Choose from: "
+            )
+            + ", ".join(MOE_TYPES)
+        },
     )
     cache_dir: Optional[str] = field(
         default=None,
@@ -112,19 +129,15 @@ class DataTrainingArguments:
         metadata={
             "help": (
                 "The names or directories of the dataset to use "
-                "(via the datasets library or local disk)."
+                "(via the datasets library or local disk). "
+                "If pretrain_mode is moe-stage2, use task name like finerord"
             )
         }
     )
     streaming: bool = field(default=False, metadata={"help": "Enable streaming mode"})
     validation_split_size: Optional[int] = field(
         default=2000,
-        metadata={
-            "help": (
-                "The percentage of the train set used as validation set "
-                "in case there's no validation split"
-            )
-        },
+        metadata={"help": "The number of the train samples used as validation set"},
     )
     preprocessing_num_workers: Optional[int] = field(
         default=None,
@@ -196,25 +209,70 @@ def main() -> None:
     set_seed(training_args.seed)
 
     tokenizer: PreTrainedTokenizer = AutoTokenizer.from_pretrained(
-        model_args.pretrained_model_name_or_dir
+        model_args.pretrained_model_name_or_dir[0]
     )
 
-    lst_ds: list[Dataset] = [load_ds(dsname) for dsname in data_args.dataset_names]
-    raw_dataset: Dataset = concatenate_datasets(lst_ds)
-
+    # load model config
     config_kwargs = {
         "cache_dir": model_args.cache_dir,
         "revision": model_args.model_revision,
         "use_auth_token": True if model_args.use_auth_token else None,
     }
     config: PretrainedConfig = AutoConfig.from_pretrained(
-        model_args.pretrained_model_name_or_dir, **config_kwargs
+        model_args.pretrained_model_name_or_dir[0], **config_kwargs
     )
-    model: PreTrainedModel = from_pretrained_with_modelforpretraining(
-        model_args.model_type, model_args.pretrained_model_name_or_dir, config=config
-    )
-    if pretrain_mode == PretrainMode.MOE_STAGE1:
-        freeze_except_mlp(model)
+
+    # dataset
+    lst_ds: list[Dataset]
+    if pretrain_mode == PretrainMode.MOE_STAGE2 or (
+        pretrain_mode == PretrainMode.DEFAULT
+        and len(set(data_args.dataset_names) - set(TASKS)) == 0
+    ):
+        lst_ds_text: list[Dataset] = [
+            load_datasetdict(dsname)["train"] for dsname in data_args.dataset_names
+        ]
+        lst_ds = []
+        for ds in lst_ds_text:
+            ds = convert_sentence_to_ids(ds, tokenizer)
+            ds = create_examples_from_document(
+                ds, tokenizer, max_length=config.max_position_embeddings
+            )
+            lst_ds.append(ds)
+        if data_args.is_dataset_masked:
+            logger.warning(
+                "Although is_dataset_masked is enabled, it is disabled in moe-stage2"
+            )
+            data_args.is_dataset_masked = False
+    else:
+        lst_ds = [load_ds(dsname) for dsname in data_args.dataset_names]
+    raw_dataset: Dataset = concatenate_datasets(lst_ds)
+
+    # model
+    model: PreTrainedModel
+    if pretrain_mode == PretrainMode.MOE_STAGE2:
+        if model_args.model_type == "deberta-v2":
+            torch_dtype: Optional[torch.dtype] = None
+            if training_args.bf16:
+                torch_dtype = torch.bfloat16
+            elif training_args.fp16:
+                torch_dtype = torch.float16
+            model = load_pretrained_deberta_v2_into_moe(
+                DebertaV2MoEForMaskedLM,
+                moe_type=model_args.moe_type,
+                model_names=model_args.pretrained_model_name_or_dir,
+                torch_dtype=torch_dtype,
+            )
+        else:
+            raise NotImplementedError()
+        freeze_except_router(model)
+    else:
+        model = from_pretrained_with_modelforpretraining(
+            model_args.model_type,
+            model_args.pretrained_model_name_or_dir[0],
+            config=config,
+        )
+        if pretrain_mode == PretrainMode.MOE_STAGE1:
+            freeze_except_mlp(model)
 
     lm_type: str = MAP_MODELFORPRETRAINING[model_args.model_type].lm_type
     n_params = sum({p.data_ptr(): p.numel() for p in model.parameters()}.values())

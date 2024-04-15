@@ -46,6 +46,30 @@ class GridHyperParams(NamedTuple):
     lr: tuple[float] = (1e-5, 2e-5, 3e-5, 5e-5, 7e-5, 1e-4)
 
 
+def load_datasetdict(task: str) -> DatasetDict:
+    main_task: str = task.split("-")[0]
+    sub_task: Optional[str] = None
+    if "-" in task:
+        sub_task = task.split("-")[1]
+    if main_task == "finerord":
+        dsd = finerord.load_datasetdict()
+    elif main_task == "fiqasa":
+        dsd = load_dataset("ChanceFocus/flare-fiqasa")
+        dsd = dsd.rename_column("gold", "labels")
+    elif main_task == "fomc":
+        dsd = fomc.load_datasetdict()
+    elif main_task == "fpb":
+        dsd = fpb.load_datasetdict()
+    elif main_task == "headline":
+        dsd = headline.load_datasetdict(sub_task, seed=42)
+    elif main_task == "ner":
+        dsd = load_dataset("ChanceFocus/flare-ner")
+        dsd = dsd.rename_column("label", "bio_tag")
+    else:  # pragma: no cover
+        raise NotImplementedError(f"Task {main_task} is not implemented")
+    return dsd
+
+
 def set_seed(seed: int) -> None:
     torch.manual_seed(seed)
     transformers.set_seed(seed)
@@ -210,38 +234,26 @@ def main():
     seed: int = args.seed
 
     # Load Dataset
+    dsd: DatasetDict = load_datasetdict(args.task)
     main_task: str = args.task.split("-")[0]
-    sub_task: Optional[str] = None
-    if "-" in args.task:
-        sub_task = args.task.split("-")[1]
-
-    dsd: DatasetDict
     metric_name: str
     num_labels: int
     if main_task == "finerord":
-        dsd = finerord.load_datasetdict()
         metric_name = "f1-macro"
         num_labels = 7
     elif main_task == "fiqasa":
-        dsd = load_dataset("ChanceFocus/flare-fiqasa")
-        dsd = dsd.rename_column("gold", "labels")
         metric_name = "f1-macro"
         num_labels = 3
     elif main_task == "fomc":
-        dsd = fomc.load_datasetdict()
         metric_name = "f1-macro"
         num_labels = 3
     elif main_task == "fpb":
-        dsd = fpb.load_datasetdict()
         metric_name = "f1-macro"
         num_labels = 3
     elif main_task == "headline":
-        dsd = headline.load_datasetdict(sub_task, seed=seed)
         metric_name = "f1-micro"
         num_labels = 2
     elif main_task == "ner":
-        dsd = load_dataset("ChanceFocus/flare-ner")
-        dsd = dsd.rename_column("label", "bio_tag")
         metric_name = "f1-macro"
         num_labels = len(NER_LABELS)
     else:  # pragma: no cover
