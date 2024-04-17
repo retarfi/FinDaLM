@@ -2,9 +2,11 @@ import argparse
 import itertools
 import logging
 import os
+from pathlib import Path
 from typing import Any, NamedTuple, Optional, Union
 
 import mlflow
+import numpy as np
 import torch
 import transformers
 from datasets import DatasetDict, load_dataset
@@ -32,6 +34,7 @@ TASKS: tuple[str] = (
     *(f"headline-{x}" for x in headline.MAP_SUBTASK_COLUMNS.keys()),
     "ner",
 )
+ROOT_DIR: Path = Path(__file__).parents[3]
 
 
 class HyperParams(NamedTuple):
@@ -41,7 +44,7 @@ class HyperParams(NamedTuple):
 
 
 class GridHyperParams(NamedTuple):
-    max_epoch: tuple[int] = (5,)
+    max_epoch: tuple[int] = (10,)
     real_batch_size: tuple[int] = (16, 32)
     lr: tuple[float] = (1e-5, 2e-5, 3e-5, 5e-5, 7e-5, 1e-4)
 
@@ -105,38 +108,18 @@ def train(
     model_name_or_dir: str,
     metric_name: str,
     dsd: DatasetDict,
+    params_max_epoch: list[int],
+    params_real_batch_size: list[int],
+    params_lr: list[float],
     config: Optional[PretrainedConfig] = None,
     accumulation_steps: int = 1,
     seed: int = 0,
-    use_mlflow: bool = False,
-    do_grid: bool = False,
 ) -> dict[str, float]:
-    if do_grid:
-        ghp = GridHyperParams()
-        product = itertools.product(ghp.max_epoch, ghp.real_batch_size, ghp.lr)
-        if use_mlflow:
-            mlflow.log_params(
-                {
-                    "max_epoch": ghp.max_epoch,
-                    "batch_size": ghp.real_batch_size,
-                    "lr": ghp.lr,
-                }
-            )
-    else:
-        hp = HyperParams()
-        product = itertools.product([hp.max_epoch], [hp.real_batch_size], [hp.lr])
-        if use_mlflow:
-            mlflow.log_params(
-                {
-                    "max_epoch": hp.max_epoch,
-                    "batch_size": hp.real_batch_size,
-                    "lr": hp.lr,
-                }
-            )
     # [key score, metrics(dict)]
     grid_results: list[dict[str, float]] = []
     eval_metrics: list[str] = [x + metric_name for x in ["eval_valid_", "eval_test_"]]
     num_gpu: int = max(1, torch.cuda.device_count())
+    product = itertools.product(params_max_epoch, params_real_batch_size, params_lr)
     for max_epoch, real_batch_size, lr in product:
         training_args = transformers.TrainingArguments(
             output_dir="./outputs/",
@@ -220,18 +203,18 @@ def main():
         help="model name or model directory",
     )
     parser.add_argument("-a", "--accumulation_steps", type=int, default=1)
-    parser.add_argument("--seed", type=int, default=0)
+    parser.add_argument("--seed", nargs="+", type=int, default=[0])
     parser.add_argument(
         "--max_length",
         type=int,
         default=-1,
         help="If not specified, use max_position_embeddings of model",
     )
-    parser.add_argument("--mlflow", action="store_true")
-    parser.add_argument("--grid", action="store_true")
+    parser.add_argument("--mlflow_run_name")
+    parser.add_argument("--do_grid", action="store_true")
     args: argparse.Namespace = parser.parse_args()
     model_name_or_dir: str = args.model_name_or_dir
-    seed: int = args.seed
+    seeds: list[int] = args.seed
 
     # Load Dataset
     dsd: DatasetDict = load_datasetdict(args.task)
@@ -361,27 +344,59 @@ def main():
     else:  # pragma: no cover
         raise NotImplementedError(f"Preprocess for {main_task} is not implemented")
 
-    if args.mlflow:
-        mlflow.set_tracking_uri("./mlruns/")
-        # TODO
-        mlflow.set_experiment("2306-jsai-journal-2")
-        mlflow.start_run(run_name=args.model.split("/")[-1])
-        mlflow.set_tags({"task": main_task, "machine": os.uname()[1], "seed": seed})
-    set_seed(seed)
-    result: dict[str, float] = train(
-        task=args.task,
-        tokenizer=tokenizer,
-        model_name_or_dir=model_name_or_dir,
-        metric_name=metric_name,
-        dsd=dsd,
-        config=config,
-        accumulation_steps=args.accumulation_steps,
-        seed=seed,
-        use_mlflow=args.mlflow,
-        do_grid=args.grid,
-    )
-    if args.mlflow:
-        mlflow.log_metrics(result)
+    params_max_epoch: list[int]
+    params_real_batch_size: list[int]
+    params_lr: list[float]
+    if args.do_grid:
+        ghp = GridHyperParams()
+        params_max_epoch = ghp.max_epoch
+        params_real_batch_size = ghp.real_batch_size
+        params_lr = ghp.lr
+    else:
+        hp = HyperParams()
+        params_max_epoch = [hp.max_epoch]
+        params_real_batch_size = [hp.real_batch_size]
+        params_lr = [hp.lr]
+
+    if args.mlflow_run_name is not None:
+        mlflow.set_tracking_uri(str(ROOT_DIR / "mlruns"))
+        mlflow.set_experiment(args.task)
+        mlflow.start_run(run_name=args.mlflow_run_name)
+        mlflow.set_tags({"task": main_task, "machine": os.uname()[1], "seed": seeds})
+        mlflow.log_params(
+            {
+                "max_epoch": ghp.max_epoch,
+                "batch_size": ghp.real_batch_size,
+                "lr": ghp.lr,
+            }
+        )
+    lst_results: list[dict[str, float]] = []
+    for seed in seeds:
+        logger.info(f"Seed {seed}")
+        set_seed(seed)
+        result: dict[str, float] = train(
+            task=args.task,
+            tokenizer=tokenizer,
+            model_name_or_dir=model_name_or_dir,
+            metric_name=metric_name,
+            dsd=dsd,
+            params_max_epoch=params_max_epoch,
+            params_real_batch_size=params_real_batch_size,
+            params_lr=params_lr,
+            config=config,
+            accumulation_steps=args.accumulation_steps,
+            seed=seed,
+        )
+        logger.info(f"Result of seed {seed}: {result}")
+        lst_results.append(result)
+    dct_results: dict[str, list[float]] = {
+        metric: [r[metric] for r in lst_results] for metric in lst_results[0].keys()
+    }
+    ave_results: dict[str, float] = {k: np.mean(v) for k, v in dct_results.items()}
+    logger.info(f"Overall results: {ave_results}")
+    if args.mlflow_run_name is not None:
+        mlflow.log_metrics(ave_results)
+        mlflow.log_metrics({f"all {k}s": v for k, v in dct_results.items()})
         mlflow.end_run()
 
 
