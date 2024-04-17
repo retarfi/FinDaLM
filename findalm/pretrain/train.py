@@ -39,7 +39,7 @@ from ..models.moe.deberta_v2 import (
 )
 from .configuration_utils import ProfilerCallback
 from .dataset import load_ds
-from .dataset.create import convert_sentence_to_ids, create_examples_from_document
+from .dataset.create import convert_sentence_to_ids
 from .moe import freeze_except_mlp, freeze_except_router
 
 logger = get_logger()
@@ -224,6 +224,7 @@ def main() -> None:
 
     # dataset
     lst_ds: list[Dataset]
+    raw_dataset: Dataset
     if pretrain_mode == PretrainMode.MOE_STAGE2 or (
         pretrain_mode == PretrainMode.DEFAULT
         and len(set(data_args.dataset_names) - set(TASKS)) == 0
@@ -231,13 +232,27 @@ def main() -> None:
         lst_ds_text: list[Dataset] = [
             load_datasetdict(dsname)["train"] for dsname in data_args.dataset_names
         ]
-        lst_ds = []
-        for ds in lst_ds_text:
-            ds = convert_sentence_to_ids(ds, tokenizer)
-            ds = create_examples_from_document(
-                ds, tokenizer, max_length=config.max_position_embeddings
-            )
-            lst_ds.append(ds)
+        lst_ds = [convert_sentence_to_ids(ds, tokenizer) for ds in lst_ds_text]
+        raw_dataset: Dataset = concatenate_datasets(lst_ds)
+        max_length: int = min(
+            config.max_position_embeddings,
+            max(map(len, raw_dataset["tokens"]))
+            + tokenizer.num_special_tokens_to_add(pair=False),
+        )
+        raw_dataset = raw_dataset.map(
+            lambda example: tokenizer.pad(
+                {
+                    "input_ids": tokenizer.build_inputs_with_special_tokens(
+                        example["tokens"]
+                    )
+                },
+                max_length=max_length,
+                padding="max_length",
+            ),
+            cache_file_name=None,
+            remove_columns=["tokens"],
+            load_from_cache_file=False,
+        )
         if data_args.is_dataset_masked:
             logger.warning(
                 "Although is_dataset_masked is enabled, it is disabled in moe-stage2"
@@ -245,7 +260,7 @@ def main() -> None:
             data_args.is_dataset_masked = False
     else:
         lst_ds = [load_ds(dsname) for dsname in data_args.dataset_names]
-    raw_dataset: Dataset = concatenate_datasets(lst_ds)
+        raw_dataset = concatenate_datasets(lst_ds)
 
     # model
     model: PreTrainedModel
