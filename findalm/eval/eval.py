@@ -34,7 +34,7 @@ TASKS: tuple[str] = (
     *(f"headline-{x}" for x in headline.MAP_SUBTASK_COLUMNS.keys()),
     "ner",
 )
-ROOT_DIR: Path = Path(__file__).parents[3]
+ROOT_DIR: Path = Path(__file__).parents[2]
 
 
 class HyperParams(NamedTuple):
@@ -344,9 +344,9 @@ def main():
     else:  # pragma: no cover
         raise NotImplementedError(f"Preprocess for {main_task} is not implemented")
 
-    params_max_epoch: list[int]
-    params_real_batch_size: list[int]
-    params_lr: list[float]
+    params_max_epoch: tuple[int]
+    params_real_batch_size: tuple[int]
+    params_lr: tuple[float]
     if args.do_grid:
         ghp = GridHyperParams()
         params_max_epoch = ghp.max_epoch
@@ -354,9 +354,9 @@ def main():
         params_lr = ghp.lr
     else:
         hp = HyperParams()
-        params_max_epoch = [hp.max_epoch]
-        params_real_batch_size = [hp.real_batch_size]
-        params_lr = [hp.lr]
+        params_max_epoch = (hp.max_epoch,)
+        params_real_batch_size = (hp.real_batch_size,)
+        params_lr = (hp.lr,)
 
     if args.mlflow_run_name is not None:
         mlflow.set_tracking_uri(str(ROOT_DIR / "mlruns"))
@@ -365,9 +365,9 @@ def main():
         mlflow.set_tags({"task": main_task, "machine": os.uname()[1], "seed": seeds})
         mlflow.log_params(
             {
-                "max_epoch": ghp.max_epoch,
-                "batch_size": ghp.real_batch_size,
-                "lr": ghp.lr,
+                "max_epoch": params_max_epoch,
+                "batch_size": params_real_batch_size,
+                "lr": params_lr,
             }
         )
     lst_results: list[dict[str, float]] = []
@@ -396,7 +396,7 @@ def main():
     logger.info(f"Overall results: {ave_results}")
     if args.mlflow_run_name is not None:
         mlflow.log_metrics(ave_results)
-        mlflow.log_metrics({f"all {k}s": v for k, v in dct_results.items()})
+        mlflow.set_tags({f"all {k}s": tuple(v) for k, v in dct_results.items()})
         mlflow.end_run()
 
 
