@@ -33,4 +33,4 @@ def test_freeze_except_router() -> None:
         model_names=[MAP_TEST_MODELS["deberta-v2"]] * 3,
     )
     freeze_except_router(model)
-    assert math.isclose(get_trainable_million_params(model), 0.000495, abs_tol=1e-6)
+    assert math.isclose(get_trainable_million_params(model), 0.00048, abs_tol=1e-6)

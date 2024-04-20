@@ -31,8 +31,7 @@ def freeze_except_router(model: PreTrainedModel) -> None:
         for _, param in model.named_parameters():
             param.requires_grad = False
         for i in range(len(model.deberta.encoder.layer)):
-            model.deberta.encoder.layer[i].router.dense.weight.requires_grad = True
-            model.deberta.encoder.layer[i].router.dense.bias.requires_grad = True
+            model.deberta.encoder.layer[i].router.weight.requires_grad = True
         avail_params: float = get_trainable_million_params(model)
         print(f"{avail_params:.1f}M / {num_params:.1f}M params are trainable")
     else:
