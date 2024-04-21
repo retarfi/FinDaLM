@@ -21,14 +21,16 @@ def test_DebertaV2FFN() -> None:
 
 
 @pytest.mark.parametrize("moe_type", ("top2-skip", "top2", "top1", "dense"))
-def test_DebertaV2MoeLayer(moe_type: str) -> None:
+def test_DebertaV2MoELayer(moe_type: str) -> None:
     config = DebertaV2Config.from_pretrained(MAP_TEST_MODELS["deberta-v2"])
     config.moe_type = moe_type
     config.num_experts = 13
+    seq_len: int = 3
+    batch_size: int = 5
     model = DebertaV2MoELayer(config)
     _ = model(
-        torch.rand((5, 3, config.hidden_size)),
-        torch.randint(0, 2, (5, config.num_attention_heads, 3, 3)),
+        torch.rand((batch_size, seq_len, config.hidden_size)),
+        torch.randint(0, 2, (batch_size, config.num_attention_heads, seq_len, seq_len)),
     )
 
 
