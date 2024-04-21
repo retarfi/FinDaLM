@@ -83,7 +83,7 @@ def load_pretrained_deberta_v2_into_moe(
     for i, mm in enumerate(lst_models):
         for name, param in dict(mm.state_dict()).items():
             m: Optional[re.Match] = re.match(
-                r"deberta\.encoder\.layer\.(\d).(intermediate|output)(.+)$", name
+                r"deberta\.encoder\.layer\.(\d+).(intermediate|output)(.+)$", name
             )
             if m is not None:
                 param_name: str = (
