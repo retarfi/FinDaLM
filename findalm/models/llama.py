@@ -1,8 +1,8 @@
 from transformers import LlamaPreTrainedModel, LlamaTokenizerFast
 
 
-def add_pad_token(tokenizer: LlamaTokenizerFast) -> None:
-    tokenizer.add_special_tokens({"pad_token": "<pad>"})
+def set_pad_token_to_tokenizer(tokenizer: LlamaTokenizerFast) -> None:
+    tokenizer.pad_token_id = tokenizer.unk_token_id
 
 
 def set_pad_token_to_model(

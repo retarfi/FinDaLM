@@ -8,7 +8,9 @@ from unittest.mock import patch
 import pytest
 import torch
 from datasets import Dataset
-from findalm.models.llama import add_pad_token
+from transformers import AutoTokenizer, BatchEncoding, PreTrainedTokenizer
+
+from findalm.models.llama import set_pad_token_to_tokenizer
 from findalm.pretrain.dataset.create import (
     apply_masking,
     convert_batchencoding_to_dict_and_pad,
@@ -18,7 +20,6 @@ from findalm.pretrain.dataset.create import (
     main,
     sentence_to_ids,
 )
-from transformers import AutoTokenizer, BatchEncoding, PreTrainedTokenizer
 
 from ... import MAP_TEST_MODELS
 
@@ -27,7 +28,7 @@ P_TEST_ROOT_DIR: Path = P_THIS_DIR.parent.parent
 TOKENIZERS: dict[str, PreTrainedTokenizer] = dict(
     map(lambda x: (x[0], AutoTokenizer.from_pretrained(x[1])), MAP_TEST_MODELS.items())
 )
-add_pad_token(TOKENIZERS["llama"])
+set_pad_token_to_tokenizer(TOKENIZERS["llama"])
 
 
 @pytest.fixture(name="tokenizer_and_sent_to_ids")
@@ -134,10 +135,7 @@ def test_create_examples_from_document(
         ),
         (
             TOKENIZERS["llama"],
-            {
-                "input_ids": [32000, 32000, 10, 11, 12],
-                "attention_mask": [0, 0, 1, 1, 1],
-            },
+            {"input_ids": [0, 0, 10, 11, 12], "attention_mask": [0, 0, 1, 1, 1]},
         ),
     ],
 )
@@ -227,6 +225,8 @@ def test_main(
         "--max_length",
         "64",
     ]
+    if model_type == "llama":
+        args_fixed.append("--is_llama")
     args_fixed.extend(["--pretrained_model_name_or_dir", MAP_TEST_MODELS[model_type]])
     if do_mask:
         args_fixed.append("--do_mask")

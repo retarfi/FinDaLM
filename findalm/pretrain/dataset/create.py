@@ -8,13 +8,12 @@ from transformers import (
     AutoTokenizer,
     BatchEncoding,
     DataCollatorForLanguageModeling,
-    LlamaTokenizer,
     LlamaTokenizerFast,
-    PreTrainedTokenizer,
+    PreTrainedTokenizerBase,
 )
 
 from ... import get_logger
-from ...models.llama import add_pad_token
+from ...models.llama import set_pad_token_to_tokenizer
 from .load import load_ds
 
 logger: logging.Logger = get_logger()
@@ -22,7 +21,7 @@ BATCH_SIZE: int = 4000
 
 
 def sentence_to_ids(
-    example: dict[str, Any], tokenizer: PreTrainedTokenizer
+    example: dict[str, Any], tokenizer: PreTrainedTokenizerBase
 ) -> dict[str, list[list[int]]]:
     batch_tokens: list[list[str]] = [tokenizer.tokenize(x) for x in example["text"]]
     token_ids: list[list[int]] = [
@@ -46,7 +45,7 @@ def filter_empty(
 
 def convert_sentence_to_ids(
     ds: Dataset,
-    tokenizer: PreTrainedTokenizer,
+    tokenizer: PreTrainedTokenizerBase,
     cache_file_name: Optional[str] = None,
     num_proc: Optional[int] = None,
 ) -> Dataset:
@@ -79,7 +78,9 @@ def convert_sentence_to_ids(
 
 
 def create_examples_from_batch(
-    batch: dict[str, list[list[int]]], tokenizer: PreTrainedTokenizer, max_length: int
+    batch: dict[str, list[list[int]]],
+    tokenizer: PreTrainedTokenizerBase,
+    max_length: int,
 ) -> dict[str, list[list[int]]]:
     max_num_tokens: int = max_length - tokenizer.num_special_tokens_to_add(pair=False)
     current_chunk: list[int] = []  # a buffer stored current working segments
@@ -116,7 +117,7 @@ def _create_examples_from_batch_for_global_tokenizer(
 
 def create_examples_from_document(
     ds: Dataset,
-    tokenizer: PreTrainedTokenizer,
+    tokenizer: PreTrainedTokenizerBase,
     max_length: int,
     cache_file_name: Optional[str] = None,
     num_proc: Optional[int] = None,
@@ -141,7 +142,7 @@ def create_examples_from_document(
 
 
 def convert_batchencoding_to_dict_and_pad(
-    batch: BatchEncoding, tokenizer: PreTrainedTokenizer, max_length: int
+    batch: BatchEncoding, tokenizer: PreTrainedTokenizerBase, max_length: int
 ) -> dict[str, list[int]]:
     # pad input_ids, attention_mask
     dct: dict[str, list[int]] = {
@@ -159,7 +160,7 @@ def convert_batchencoding_to_dict_and_pad(
 def apply_masking(
     ds: Dataset,
     max_length: int,
-    tokenizer: PreTrainedTokenizer,
+    tokenizer: PreTrainedTokenizerBase,
     cache_file_name: Optional[str] = None,
     num_proc: Optional[int] = None,
 ) -> Dataset:
@@ -195,14 +196,14 @@ def create_dataset(
     cache_file_name: Optional[str],
     do_mask: bool = False,
     num_proc: Optional[int] = None,
+    is_llama: Optional[bool] = False,
 ) -> None:
-    tokenizer: PreTrainedTokenizer = AutoTokenizer.from_pretrained(
-        pretrained_model_name_or_dir
-    )
-    if isinstance(tokenizer, LlamaTokenizer) or isinstance(
-        tokenizer, LlamaTokenizerFast
-    ):
-        add_pad_token(tokenizer)
+    tokenizer: PreTrainedTokenizerBase
+    if is_llama:
+        tokenizer = LlamaTokenizerFast.from_pretrained(pretrained_model_name_or_dir)
+        set_pad_token_to_tokenizer(tokenizer)
+    else:
+        tokenizer = AutoTokenizer.from_pretrained(pretrained_model_name_or_dir)
     ds: Dataset = concatenate_datasets([load_ds(path) for path in input_datasets])
 
     logger.info("Convert sentence to ids...")
@@ -264,6 +265,9 @@ def main() -> None:
     parser.add_argument(
         "--num_proc", type=int, help="Max number of processes when tokenizing"
     )
+    parser.add_argument(
+        "--is_llama", help="Set when using Llama model", action="store_true"
+    )
 
     args: argparse.Namespace = parser.parse_args()
     create_dataset(
@@ -274,6 +278,7 @@ def main() -> None:
         cache_file_name=args.cache_file_name,
         do_mask=args.do_mask,
         num_proc=args.num_proc,
+        is_llama=args.is_llama,
     )
 
 
