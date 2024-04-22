@@ -227,7 +227,7 @@ def main() -> None:
     raw_dataset: Dataset
     if pretrain_mode == PretrainMode.MOE_STAGE2 or (
         pretrain_mode == PretrainMode.DEFAULT
-        and len(set(data_args.dataset_names) - set(TASKS)) == 0
+        and all([x in TASKS for x in data_args.dataset_names])
     ):
         lst_ds_text: list[Dataset] = [
             load_datasetdict(dsname)["train"] for dsname in data_args.dataset_names
@@ -292,6 +292,8 @@ def main() -> None:
         exclude_mlm_head: bool
         if model_args.model_type == "deberta-v2":
             exclude_mlm_head = True
+        elif model_args.model_type == "llama":
+            exclude_mlm_head = False
         else:
             raise NotImplementedError()
         if pretrain_mode == PretrainMode.MOE_STAGE1:
