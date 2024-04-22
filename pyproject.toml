@@ -8,13 +8,13 @@ readme = "README.md"
 
 [tool.poetry.dependencies]
 python = "^3.9"
-transformers = "^4.38.2"
+transformers = "^4.40.0"
 accelerate = "^0.28.0"
 sentencepiece = "^0.2.0"
 datasets = "^2.18.0"
 torch = "^2.2.1"
 wheel = "^0.43.0"
-# Should be installed with `poetry run pip install flash-attn --no-build-isolation`
+# Should be installed with `poetry run pip install flash-attn==2.5.6 --no-build-isolation`
 # flash-attn = "^2.5.6"
 evaluate = "^0.4.1"
 mlflow = "^2.11.2"

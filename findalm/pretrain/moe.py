@@ -1,6 +1,7 @@
-from transformers import DebertaV2ForMaskedLM, PreTrainedModel
+from transformers import DebertaV2ForMaskedLM, LlamaForCausalLM, PreTrainedModel
 
 from ..models.moe.deberta_v2 import DebertaV2MoEForMaskedLM
+from ..models.moe.llama import LlamaMoEForCausalLM
 
 
 def get_trainable_million_params(m: PreTrainedModel) -> float:
@@ -26,10 +27,17 @@ def freeze_except_mlp(model: PreTrainedModel, exclude_mlm_head: bool) -> None:
             model.cls.predictions.transform.LayerNorm.weight.requires_grad = True
             model.cls.predictions.transform.dense.bias.requires_grad = True
             model.cls.predictions.transform.dense.weight.requires_grad = True
-        avail_params: float = get_trainable_million_params(model)
-        print(f"{avail_params:.1f}M / {num_params:.1f}M params are trainable")
+    elif isinstance(model, LlamaForCausalLM):
+        for _, param in model.named_parameters():
+            param.requires_grad = False
+        for i in range(len(model.model.layers)):
+            model.model.layers[i].mlp.gate_proj.weight.requires_grad = True
+            model.model.layers[i].mlp.up_proj.weight.requires_grad = True
+            model.model.layers[i].mlp.down_proj.weight.requires_grad = True
     else:
         raise NotImplementedError()
+    avail_params: float = get_trainable_million_params(model)
+    print(f"{avail_params:.1f}M / {num_params:.1f}M params are trainable")
 
 
 def freeze_except_router(model: PreTrainedModel, exclude_mlm_head: bool) -> None:
@@ -46,7 +54,12 @@ def freeze_except_router(model: PreTrainedModel, exclude_mlm_head: bool) -> None
             model.cls.predictions.transform.LayerNorm.weight.requires_grad = True
             model.cls.predictions.transform.dense.bias.requires_grad = True
             model.cls.predictions.transform.dense.weight.requires_grad = True
-        avail_params: float = get_trainable_million_params(model)
-        print(f"{avail_params:.1f}M / {num_params:.1f}M params are trainable")
+    elif isinstance(model, LlamaMoEForCausalLM):
+        for _, param in model.named_parameters():
+            param.requires_grad = False
+        for i in range(len(model.model.layers)):
+            model.model.layers[i].router.weight.requires_grad = True
     else:
         raise NotImplementedError()
+    avail_params: float = get_trainable_million_params(model)
+    print(f"{avail_params:.1f}M / {num_params:.1f}M params are trainable")

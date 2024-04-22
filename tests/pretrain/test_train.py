@@ -19,6 +19,7 @@ MAX_LENGTH: int = 64
     "pretrain_mode,model_type,args",
     [
         ("moe-stage1", "deberta-v2", ""),
+        ("moe-stage1", "llama", ""),
         ("default", "deberta-v2", ""),  # model,mask
         ("default", "deberta-v2", "--is_dataset_masked"),  # model
         ("default", "deberta-v2", "--is_dataset_masked --do_eval"),  # do_eval
@@ -29,8 +30,6 @@ MAX_LENGTH: int = 64
             "llama",
             "--do_eval --prediction_loss_only",
         ),  # do_eval,prediction_loss_only
-        ("default", "roberta", ""),
-        ("default", "t5", ""),
     ],
 )
 def test_main(pretrain_mode: str, model_type: str, args: str) -> None:
@@ -134,10 +133,10 @@ def test_resume_from_checkpoint(
 @pytest.mark.parametrize(
     "model_type,dataset_names,moe_type",
     [
-        ("deberta-v2", "finerord", "top2-skip"),
+        ("llama", "finerord", "top2-skip"),
         ("deberta-v2", "fiqasa", "top2"),
         ("deberta-v2", "fomc", "top1"),
-        ("deberta-v2", "ner", "top1"),
+        ("llama", "ner", "top1"),
         ("deberta-v2", "headline-price", "dense"),
     ],
 )

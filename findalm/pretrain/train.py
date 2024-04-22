@@ -32,11 +32,13 @@ from ..models.base import (
     MAP_MODELFORPRETRAINING,
     from_pretrained_with_modelforpretraining,
 )
+from ..models.llama import set_pad_token_to_model, set_pad_token_to_tokenizer
 from ..models.moe.base import MOE_TYPES
 from ..models.moe.deberta_v2 import (
     DebertaV2MoEForMaskedLM,
     load_pretrained_deberta_v2_into_moe,
 )
+from ..models.moe.llama import LlamaMoEForCausalLM, load_pretrained_llama_into_moe
 from .configuration_utils import ProfilerCallback
 from .dataset import load_ds
 from .dataset.create import convert_sentence_to_ids
@@ -211,6 +213,8 @@ def main() -> None:
     tokenizer: PreTrainedTokenizer = AutoTokenizer.from_pretrained(
         model_args.pretrained_model_name_or_dir[0]
     )
+    if model_args.model_type == "llama":
+        set_pad_token_to_tokenizer(tokenizer)
 
     # load model config
     config_kwargs = {
@@ -266,16 +270,24 @@ def main() -> None:
     model: PreTrainedModel
     if pretrain_mode == PretrainMode.MOE_STAGE2:
         assert model_args.moe_type is not None
+        torch_dtype: Optional[torch.dtype] = None
+        if training_args.bf16:
+            torch_dtype = torch.bfloat16
+        elif training_args.fp16:
+            torch_dtype = torch.float16
         exclude_mlm_head: bool
         if model_args.model_type == "deberta-v2":
             exclude_mlm_head = True
-            torch_dtype: Optional[torch.dtype] = None
-            if training_args.bf16:
-                torch_dtype = torch.bfloat16
-            elif training_args.fp16:
-                torch_dtype = torch.float16
             model = load_pretrained_deberta_v2_into_moe(
                 DebertaV2MoEForMaskedLM,
+                moe_type=model_args.moe_type,
+                model_names=model_args.pretrained_model_name_or_dir,
+                torch_dtype=torch_dtype,
+            )
+        elif model_args.model_type == "llama":
+            exclude_mlm_head = False
+            model = load_pretrained_llama_into_moe(
+                LlamaMoEForCausalLM,
                 moe_type=model_args.moe_type,
                 model_names=model_args.pretrained_model_name_or_dir,
                 torch_dtype=torch_dtype,
@@ -298,6 +310,8 @@ def main() -> None:
             raise NotImplementedError()
         if pretrain_mode == PretrainMode.MOE_STAGE1:
             freeze_except_mlp(model, exclude_mlm_head)
+    if model_args.model_type == "llama":
+        set_pad_token_to_model(model, tokenizer)
 
     lm_type: str = MAP_MODELFORPRETRAINING[model_args.model_type].lm_type
     n_params = sum({p.data_ptr(): p.numel() for p in model.parameters()}.values())
