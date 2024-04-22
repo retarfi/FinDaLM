@@ -63,6 +63,8 @@ def test_main(pretrain_mode: str, model_type: str, args: str) -> None:
         "--data_seed",
         "42",
         "--bf16",
+        "--report_to",
+        "none",
     ]
     if args:
         args_fixed.extend(args.split(" "))
