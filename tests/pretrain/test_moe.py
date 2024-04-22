@@ -1,5 +1,6 @@
 import math
 
+import pytest
 from transformers import AutoModelForMaskedLM
 
 from findalm.models.moe.deberta_v2 import (
@@ -20,17 +21,21 @@ def test_get_trainable_million_params() -> None:
     assert math.isclose(get_trainable_million_params(model), 4.28, abs_tol=1e-2)
 
 
-def test_freeze_except_mlp() -> None:
+@pytest.mark.parametrize("exclude_mlm_head, num_params", [(True, 0.14), (False, 0.01)])
+def test_freeze_except_mlp(exclude_mlm_head: bool, num_params: float) -> None:
     model = AutoModelForMaskedLM.from_pretrained(MAP_TEST_MODELS["deberta-v2"])
-    freeze_except_mlp(model)
-    assert math.isclose(get_trainable_million_params(model), 0.01, abs_tol=1e-2)
+    freeze_except_mlp(model, exclude_mlm_head)
+    assert math.isclose(get_trainable_million_params(model), num_params, abs_tol=1e-2)
 
 
-def test_freeze_except_router() -> None:
+@pytest.mark.parametrize(
+    "exclude_mlm_head, num_params", [(True, 0.129601), (False, 0.00048)]
+)
+def test_freeze_except_router(exclude_mlm_head: bool, num_params: float) -> None:
     model = load_pretrained_deberta_v2_into_moe(
         DebertaV2MoEForMaskedLM,
         "dense",
         model_names=[MAP_TEST_MODELS["deberta-v2"]] * 3,
     )
-    freeze_except_router(model)
-    assert math.isclose(get_trainable_million_params(model), 0.00048, abs_tol=1e-6)
+    freeze_except_router(model, exclude_mlm_head)
+    assert math.isclose(get_trainable_million_params(model), num_params, abs_tol=1e-6)

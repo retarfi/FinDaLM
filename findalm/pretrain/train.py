@@ -266,7 +266,9 @@ def main() -> None:
     model: PreTrainedModel
     if pretrain_mode == PretrainMode.MOE_STAGE2:
         assert model_args.moe_type is not None
+        exclude_mlm_head: bool
         if model_args.model_type == "deberta-v2":
+            exclude_mlm_head = True
             torch_dtype: Optional[torch.dtype] = None
             if training_args.bf16:
                 torch_dtype = torch.bfloat16
@@ -280,15 +282,20 @@ def main() -> None:
             )
         else:
             raise NotImplementedError()
-        freeze_except_router(model)
+        freeze_except_router(model, exclude_mlm_head)
     else:
         model = from_pretrained_with_modelforpretraining(
             model_args.model_type,
             model_args.pretrained_model_name_or_dir[0],
             config=config,
         )
+        exclude_mlm_head: bool
+        if model_args.model_type == "deberta-v2":
+            exclude_mlm_head = True
+        else:
+            raise NotImplementedError()
         if pretrain_mode == PretrainMode.MOE_STAGE1:
-            freeze_except_mlp(model)
+            freeze_except_mlp(model, exclude_mlm_head)
 
     lm_type: str = MAP_MODELFORPRETRAINING[model_args.model_type].lm_type
     n_params = sum({p.data_ptr(): p.numel() for p in model.parameters()}.values())
