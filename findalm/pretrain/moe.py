@@ -8,12 +8,14 @@ def get_trainable_million_params(m: PreTrainedModel) -> float:
     return sum(p.numel() for p in m.parameters() if p.requires_grad) / 10**6
 
 
-def freeze_except_mlp(model: PreTrainedModel, exclude_mlm_head: bool) -> None:
+def freeze_except_mlp(
+    model: PreTrainedModel, exclude_mlm_head: bool, front_frozen_layers: int
+) -> None:
     num_params: float = get_trainable_million_params(model)
     if isinstance(model, DebertaV2ForMaskedLM):
         for _, param in model.named_parameters():
             param.requires_grad = False
-        for i in range(len(model.deberta.encoder.layer)):
+        for i in range(front_frozen_layers, len(model.deberta.encoder.layer)):
             model.deberta.encoder.layer[i].intermediate.dense.weight.requires_grad = (
                 True
             )
@@ -30,7 +32,7 @@ def freeze_except_mlp(model: PreTrainedModel, exclude_mlm_head: bool) -> None:
     elif isinstance(model, LlamaForCausalLM):
         for _, param in model.named_parameters():
             param.requires_grad = False
-        for i in range(len(model.model.layers)):
+        for i in range(front_frozen_layers, len(model.model.layers)):
             model.model.layers[i].mlp.gate_proj.weight.requires_grad = True
             model.model.layers[i].mlp.up_proj.weight.requires_grad = True
             model.model.layers[i].mlp.down_proj.weight.requires_grad = True
@@ -40,12 +42,14 @@ def freeze_except_mlp(model: PreTrainedModel, exclude_mlm_head: bool) -> None:
     print(f"{avail_params:.1f}M / {num_params:.1f}M params are trainable")
 
 
-def freeze_except_router(model: PreTrainedModel, exclude_mlm_head: bool) -> None:
+def freeze_except_router(
+    model: PreTrainedModel, exclude_mlm_head: bool, front_frozen_layers: int
+) -> None:
     num_params: float = get_trainable_million_params(model)
     if isinstance(model, DebertaV2MoEForMaskedLM):
         for _, param in model.named_parameters():
             param.requires_grad = False
-        for i in range(len(model.deberta.encoder.layer)):
+        for i in range(front_frozen_layers, len(model.deberta.encoder.layer)):
             model.deberta.encoder.layer[i].router.weight.requires_grad = True
         if exclude_mlm_head:
             model.cls.predictions.bias.requires_grad = True
@@ -57,7 +61,7 @@ def freeze_except_router(model: PreTrainedModel, exclude_mlm_head: bool) -> None
     elif isinstance(model, LlamaMoEForCausalLM):
         for _, param in model.named_parameters():
             param.requires_grad = False
-        for i in range(len(model.model.layers)):
+        for i in range(front_frozen_layers, len(model.model.layers)):
             model.model.layers[i].router.weight.requires_grad = True
     else:
         raise NotImplementedError()

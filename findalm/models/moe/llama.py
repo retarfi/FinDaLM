@@ -15,6 +15,7 @@ from transformers.modeling_outputs import (
 )
 from transformers.models.llama.modeling_llama import (
     LLAMA_ATTENTION_CLASSES,
+    LlamaDecoderLayer,
     LlamaMLP,
     LlamaRMSNorm,
     LlamaPreTrainedModel,
@@ -38,6 +39,7 @@ def load_pretrained_llama_into_moe(
     cls,
     moe_type: str,
     model_names: list[str],
+    front_frozen_layers: int = 0,
     torch_dtype: Optional[torch.dtype] = None,
 ) -> PreTrainedModel:
     base_cls = {LlamaMoEForCausalLM: LlamaForCausalLM}[cls]
@@ -51,6 +53,10 @@ def load_pretrained_llama_into_moe(
             assert confirm_same_weights(
                 m1.model.layers[i].self_attn, m2.model.layers[i].self_attn
             )
+            if i < front_frozen_layers:
+                assert confirm_same_weights(
+                    m1.model.layers[i].mlp, m2.model.layers[i].mlp
+                )
     config = lst_models[0].config
     config.num_experts = len(lst_models)
     if moe_type == "top2-skip":
@@ -60,6 +66,7 @@ def load_pretrained_llama_into_moe(
         config.use_router_loss = False
     else:
         config.use_router_loss = True
+    config.front_frozen_layers = front_frozen_layers
     model: PreTrainedModel = cls(config)
     # copy base weight
     dct_params = dict(model.state_dict())
@@ -71,7 +78,7 @@ def load_pretrained_llama_into_moe(
     for i, mm in enumerate(lst_models):
         for name, param in dict(mm.state_dict()).items():
             m: Optional[re.Match] = re.match(r"model\.layers\.(\d+).mlp(.+)$", name)
-            if m is not None:
+            if m is not None and front_frozen_layers <= int(m.group(1)):
                 param_name: str = f"model.layers.{m.group(1)}.experts.{i}{m.group(2)}"
                 dct_params[param_name].data.copy_(param.data)
                 init_params.remove(param_name)
@@ -248,10 +255,17 @@ class LlamaMoEModel(LlamaModel):
         self.embed_tokens = nn.Embedding(
             config.vocab_size, config.hidden_size, self.padding_idx
         )
+        self.front_frozen_layers = config.front_frozen_layers
         self.layers = nn.ModuleList(
             [
+                LlamaDecoderLayer(config, layer_idx)
+                for layer_idx in range(self.front_frozen_layers)
+            ]
+            + [
                 LlamaMoEDecoderLayer(config, layer_idx)
-                for layer_idx in range(config.num_hidden_layers)
+                for layer_idx in range(
+                    self.front_frozen_layers, config.num_hidden_layers
+                )
             ]
         )
         self.norm = LlamaRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
@@ -331,7 +345,7 @@ class LlamaMoEModel(LlamaModel):
         all_self_attns = () if output_attentions else None
         next_decoder_cache = None
 
-        for decoder_layer in self.layers:
+        for i, decoder_layer in enumerate(self.layers):
             if output_hidden_states:
                 all_hidden_states += (hidden_states,)
 
@@ -358,15 +372,23 @@ class LlamaMoEModel(LlamaModel):
                 )
 
             hidden_states = layer_outputs[0]
-            router_logits = layer_outputs[1]
 
-            if use_cache:
-                next_decoder_cache = layer_outputs[3 if output_attentions else 2]
+            if i < self.front_frozen_layers:
+                if use_cache:
+                    next_decoder_cache = layer_outputs[2 if output_attentions else 1]
 
-            if output_attentions:
-                all_self_attns += (layer_outputs[2],)
+                if output_attentions:
+                    all_self_attns += (layer_outputs[1],)
+            else:
+                router_logits = layer_outputs[1]
 
-            all_router_logits = all_router_logits + (router_logits,)
+                if use_cache:
+                    next_decoder_cache = layer_outputs[3 if output_attentions else 2]
+
+                if output_attentions:
+                    all_self_attns += (layer_outputs[2],)
+
+                all_router_logits = all_router_logits + (router_logits,)
 
         hidden_states = self.norm(hidden_states)
 
@@ -403,7 +425,7 @@ class LlamaMoEModel(LlamaModel):
 
 
 class LlamaMoEForCausalLM(LlamaForCausalLM):
-    def __init__(self, config):
+    def __init__(self, config: LlamaConfig):
         super().__init__(config)
         self.model = LlamaMoEModel(config)
         self.vocab_size = config.vocab_size

@@ -28,10 +28,12 @@ def test_LlamaMoEDecoderLayer(moe_type: str) -> None:
 
 @pytest.mark.parametrize("cls", (LlamaMoEForCausalLM,))
 @pytest.mark.parametrize("moe_type", ("top2-skip", "top2", "top1", "dense"))
-def test_load_pretrained_into_moe(cls, moe_type: str) -> None:
+@pytest.mark.parametrize("front_frozen_layers", (0, 2))
+def test_load_pretrained_into_moe(cls, moe_type: str, front_frozen_layers: int) -> None:
     _ = load_pretrained_llama_into_moe(
         cls,
         moe_type,
         model_names=[MAP_TEST_MODELS["llama"]] * 3,
+        front_frozen_layers=front_frozen_layers,
         torch_dtype=torch.bfloat16,
     )

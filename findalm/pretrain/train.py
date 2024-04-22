@@ -74,6 +74,15 @@ class ModelArguments:
     pretrained_model_name_or_dir: list[str] = field(
         metadata={"help": "Pretrained model names or directories"}
     )
+    front_frozen_layers: int = field(
+        default=0,
+        metadata={
+            "help": (
+                "Number of layers to freeze and not use with the MoE architecture."
+                "Only available for Llama."
+            )
+        },
+    )
     moe_type: Optional[str] = field(
         default=None,
         metadata={
@@ -267,14 +276,14 @@ def main() -> None:
         raw_dataset = concatenate_datasets(lst_ds)
 
     # model
+    torch_dtype: Optional[torch.dtype] = None
+    if training_args.bf16:
+        torch_dtype = torch.bfloat16
+    elif training_args.fp16:
+        torch_dtype = torch.float16
     model: PreTrainedModel
     if pretrain_mode == PretrainMode.MOE_STAGE2:
         assert model_args.moe_type is not None
-        torch_dtype: Optional[torch.dtype] = None
-        if training_args.bf16:
-            torch_dtype = torch.bfloat16
-        elif training_args.fp16:
-            torch_dtype = torch.float16
         exclude_mlm_head: bool
         if model_args.model_type == "deberta-v2":
             exclude_mlm_head = True
@@ -291,15 +300,17 @@ def main() -> None:
                 moe_type=model_args.moe_type,
                 model_names=model_args.pretrained_model_name_or_dir,
                 torch_dtype=torch_dtype,
+                front_frozen_layers=model_args.front_frozen_layers,
             )
         else:
             raise NotImplementedError()
-        freeze_except_router(model, exclude_mlm_head)
+        freeze_except_router(model, exclude_mlm_head, model_args.front_frozen_layers)
     else:
         model = from_pretrained_with_modelforpretraining(
             model_args.model_type,
             model_args.pretrained_model_name_or_dir[0],
             config=config,
+            torch_dtype=torch_dtype,
         )
         exclude_mlm_head: bool
         if model_args.model_type == "deberta-v2":
@@ -309,7 +320,7 @@ def main() -> None:
         else:
             raise NotImplementedError()
         if pretrain_mode == PretrainMode.MOE_STAGE1:
-            freeze_except_mlp(model, exclude_mlm_head)
+            freeze_except_mlp(model, exclude_mlm_head, model_args.front_frozen_layers)
     if model_args.model_type == "llama":
         set_pad_token_to_model(model, tokenizer)
 
