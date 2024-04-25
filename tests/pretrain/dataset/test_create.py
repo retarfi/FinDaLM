@@ -8,9 +8,10 @@ from unittest.mock import patch
 import pytest
 import torch
 from datasets import Dataset
-from transformers import AutoTokenizer, BatchEncoding, PreTrainedTokenizer
+from transformers import BatchEncoding, PreTrainedTokenizer
 
 from findalm.models.llama import set_pad_token_to_tokenizer
+from findalm.models.tokenizer import load_tokenizer
 from findalm.pretrain.dataset.create import (
     apply_masking,
     convert_batchencoding_to_dict_and_pad,
@@ -26,7 +27,9 @@ from ... import MAP_TEST_MODELS
 P_THIS_DIR: Path = Path(os.path.dirname(os.path.abspath(__file__)))
 P_TEST_ROOT_DIR: Path = P_THIS_DIR.parent.parent
 TOKENIZERS: dict[str, PreTrainedTokenizer] = dict(
-    map(lambda x: (x[0], AutoTokenizer.from_pretrained(x[1])), MAP_TEST_MODELS.items())
+    map(
+        lambda x: (x[0], load_tokenizer(x[1], x[0] == "llama")), MAP_TEST_MODELS.items()
+    )
 )
 set_pad_token_to_tokenizer(TOKENIZERS["llama"])
 
@@ -36,11 +39,8 @@ def fixture_tokenizer_and_sent_to_ids() -> tuple[PreTrainedTokenizer, OrderedDic
     tokenizer: PreTrainedTokenizer = TOKENIZERS["llama"]
     ordct: OrderedDict[str, list[int]] = collections.OrderedDict(
         [
-            ("I am a cat.", [306, 626, 263, 6635, 29889]),
-            (
-                "I have, as yet, no name.",
-                [306, 505, 29892, 408, 3447, 29892, 694, 1024, 29889],
-            ),
+            ("I am a cat.", [40, 1097, 264, 8415, 13]),
+            ("I have, as yet, no name.", [40, 617, 11, 439, 3686, 11, 912, 836, 13]),
         ]
     )
     return tokenizer, ordct
@@ -72,7 +72,7 @@ def test_convert_sentence_to_ids(
             TOKENIZERS["deberta-v2"],
             [[1, 7, 8, 9, 2], [1, 10, 11, 12, 2], [1, 13, 14, 15, 2]],
         ),
-        (TOKENIZERS["llama"], [[1, 7, 8, 9, 10], [1, 11, 12, 13, 14]]),
+        (TOKENIZERS["llama"], [[128000, 7, 8, 9, 10], [128000, 11, 12, 13, 14]]),
     ],
 )
 def test_create_examples_from_batch(
@@ -95,7 +95,7 @@ def test_create_examples_from_batch(
             TOKENIZERS["deberta-v2"],
             [[1, 7, 8, 9, 2], [1, 10, 11, 12, 2], [1, 13, 14, 15, 2]],
         ),
-        (TOKENIZERS["llama"], [[1, 7, 8, 9, 10], [1, 11, 12, 13, 14]]),
+        (TOKENIZERS["llama"], [[128000, 7, 8, 9, 10], [128000, 11, 12, 13, 14]]),
     ],
 )
 def test_create_examples_from_document(
@@ -135,7 +135,10 @@ def test_create_examples_from_document(
         ),
         (
             TOKENIZERS["llama"],
-            {"input_ids": [0, 0, 10, 11, 12], "attention_mask": [0, 0, 1, 1, 1]},
+            {
+                "input_ids": [128255, 128255, 10, 11, 12],
+                "attention_mask": [0, 0, 1, 1, 1],
+            },
         ),
     ],
 )

@@ -1,6 +1,16 @@
-from transformers import DebertaV2ForMaskedLM, LlamaForCausalLM, PreTrainedModel
+from transformers import (
+    DebertaV2ForMaskedLM,
+    DebertaV2ForSequenceClassification,
+    DebertaV2ForTokenClassification,
+    LlamaForCausalLM,
+    PreTrainedModel,
+)
 
-from ..models.moe.deberta_v2 import DebertaV2MoEForMaskedLM
+from ..models.moe.deberta_v2 import (
+    DebertaV2MoEForMaskedLM,
+    DebertaV2MoEForSequenceClassification,
+    DebertaV2MoEForTokenClassification,
+)
 from ..models.moe.llama import LlamaMoEForCausalLM
 
 
@@ -63,6 +73,34 @@ def freeze_except_router(
             param.requires_grad = False
         for i in range(front_frozen_layers, len(model.model.layers)):
             model.model.layers[i].router.weight.requires_grad = True
+    else:
+        raise NotImplementedError()
+    avail_params: float = get_trainable_million_params(model)
+    print(f"{avail_params:.1f}M / {num_params:.1f}M params are trainable")
+
+
+def freeze_except_cls(model: PreTrainedModel) -> None:
+    num_params: float = get_trainable_million_params(model)
+    if any(
+        map(
+            lambda x: isinstance(model, x),
+            (
+                DebertaV2ForSequenceClassification,
+                DebertaV2MoEForSequenceClassification,
+                DebertaV2ForTokenClassification,
+                DebertaV2MoEForTokenClassification,
+            ),
+        )
+    ):
+        for _, param in model.named_parameters():
+            param.requires_grad = False
+        model.classifier.bias.requires_grad = True
+        model.classifier.weight.requires_grad = True
+        if isinstance(model, DebertaV2ForSequenceClassification) or isinstance(
+            model, DebertaV2MoEForSequenceClassification
+        ):
+            model.pooler.bias.requires_grad = True
+            model.pooler.weight.requires_grad = True
     else:
         raise NotImplementedError()
     avail_params: float = get_trainable_million_params(model)

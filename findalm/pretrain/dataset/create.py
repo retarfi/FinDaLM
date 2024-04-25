@@ -5,15 +5,13 @@ from typing import Any, Optional
 
 from datasets import Dataset, concatenate_datasets
 from transformers import (
-    AutoTokenizer,
     BatchEncoding,
     DataCollatorForLanguageModeling,
-    LlamaTokenizerFast,
     PreTrainedTokenizerBase,
 )
 
 from ... import get_logger
-from ...models.llama import set_pad_token_to_tokenizer
+from ...models.tokenizer import load_tokenizer
 from .load import load_ds
 
 logger: logging.Logger = get_logger()
@@ -198,12 +196,9 @@ def create_dataset(
     num_proc: Optional[int] = None,
     is_llama: Optional[bool] = False,
 ) -> None:
-    tokenizer: PreTrainedTokenizerBase
-    if is_llama:
-        tokenizer = LlamaTokenizerFast.from_pretrained(pretrained_model_name_or_dir)
-        set_pad_token_to_tokenizer(tokenizer)
-    else:
-        tokenizer = AutoTokenizer.from_pretrained(pretrained_model_name_or_dir)
+    tokenizer: PreTrainedTokenizerBase = load_tokenizer(
+        pretrained_model_name_or_dir, is_llama=is_llama
+    )
     ds: Dataset = concatenate_datasets([load_ds(path) for path in input_datasets])
 
     logger.info("Convert sentence to ids...")

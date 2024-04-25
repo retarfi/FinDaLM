@@ -11,11 +11,10 @@ import transformers
 from datasets import Dataset, concatenate_datasets
 from transformers import (
     AutoConfig,
-    AutoTokenizer,
     HfArgumentParser,
     PretrainedConfig,
     PreTrainedModel,
-    PreTrainedTokenizer,
+    PreTrainedTokenizerBase,
     Trainer,
     TrainingArguments,
     set_seed,
@@ -32,7 +31,8 @@ from ..models.base import (
     MAP_MODELFORPRETRAINING,
     from_pretrained_with_modelforpretraining,
 )
-from ..models.llama import set_pad_token_to_model, set_pad_token_to_tokenizer
+from ..models.llama import set_pad_token_to_model
+from ..models.tokenizer import load_tokenizer
 from ..models.moe.base import MOE_TYPES
 from ..models.moe.deberta_v2 import (
     DebertaV2MoEForMaskedLM,
@@ -219,11 +219,10 @@ def main() -> None:
     # Set seed before initializing model.
     set_seed(training_args.seed)
 
-    tokenizer: PreTrainedTokenizer = AutoTokenizer.from_pretrained(
-        model_args.pretrained_model_name_or_dir[0]
+    tokenizer: PreTrainedTokenizerBase = load_tokenizer(
+        model_args.pretrained_model_name_or_dir[0],
+        is_llama=model_args.model_type == "llama",
     )
-    if model_args.model_type == "llama":
-        set_pad_token_to_tokenizer(tokenizer)
 
     # load model config
     config_kwargs = {
@@ -239,7 +238,7 @@ def main() -> None:
     lst_ds: list[Dataset]
     raw_dataset: Dataset
     if pretrain_mode == PretrainMode.MOE_STAGE2 or (
-        pretrain_mode == PretrainMode.DEFAULT
+        pretrain_mode == PretrainMode.MOE_STAGE1
         and all([x in TASKS for x in data_args.dataset_names])
     ):
         lst_ds_text: list[Dataset] = [

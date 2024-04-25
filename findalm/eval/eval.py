@@ -14,13 +14,18 @@ from transformers import (
     AutoConfig,
     AutoModelForSequenceClassification,
     AutoModelForTokenClassification,
-    AutoTokenizer,
     PretrainedConfig,
     PreTrainedModel,
-    PreTrainedTokenizerFast,
+    PreTrainedTokenizerBase,
 )
 
 from .. import get_logger
+from ..models.tokenizer import load_tokenizer
+from ..models.moe.deberta_v2 import (
+    DebertaV2MoEForSequenceClassification,
+    DebertaV2MoEForTokenClassification,
+)
+from ..pretrain.moe import freeze_except_cls
 from .base import NER_LABELS, load_compute_metrics
 from .tasks import finerord, fomc, fpb, headline
 
@@ -104,7 +109,7 @@ def postprocess(
 
 def train(
     task: str,
-    tokenizer: PreTrainedTokenizerFast,
+    tokenizer: PreTrainedTokenizerBase,
     model_name_or_dir: str,
     metric_name: str,
     dsd: DatasetDict,
@@ -114,6 +119,8 @@ def train(
     config: Optional[PretrainedConfig] = None,
     accumulation_steps: int = 1,
     seed: int = 0,
+    bf16: bool = False,
+    tune_only_cls: bool = True,
 ) -> dict[str, float]:
     # [key score, metrics(dict)]
     grid_results: list[dict[str, float]] = []
@@ -142,23 +149,29 @@ def train(
             report_to="none",
             label_names=None,
             disable_tqdm=True,
+            bf16=bf16,
             # data_seed=params["seed"],
         )
 
         main_task: str = task.split("-")[0]
-        model: PreTrainedModel
         if main_task in ("fiqasa", "fomc", "fpb", "headline"):
             # Sentence Classification Task
-            model = AutoModelForSequenceClassification.from_pretrained(
-                model_name_or_dir, config=config
-            )
+            if config.architectures == ["DebertaV2MoEForMaskedLM"]:
+                cls = DebertaV2MoEForSequenceClassification
+
+            else:
+                cls = AutoModelForSequenceClassification
         elif main_task in ("finerord", "ner"):
             # Token Classification Task
-            model = AutoModelForTokenClassification.from_pretrained(
-                model_name_or_dir, config=config
-            )
+            if config.architectures == ["DebertaV2MoEForMaskedLM"]:
+                cls = DebertaV2MoEForTokenClassification
+            else:
+                cls = AutoModelForTokenClassification
         else:  # pragma: no cover
             raise NotImplementedError(f"Preprocess for {main_task} is not implemented")
+        model: PreTrainedModel = cls.from_pretrained(model_name_or_dir, config=config)
+        if tune_only_cls:
+            freeze_except_cls(model)
 
         # train
         trainer = transformers.Trainer(
@@ -212,6 +225,8 @@ def main():
     )
     parser.add_argument("--mlflow_run_name")
     parser.add_argument("--do_grid", action="store_true")
+    parser.add_argument("--bf16", action="store_true")
+    parser.add_argument("--tune_only_cls", action="store_true")
     args: argparse.Namespace = parser.parse_args()
     model_name_or_dir: str = args.model_name_or_dir
     seeds: list[int] = args.seed
@@ -242,10 +257,10 @@ def main():
     else:  # pragma: no cover
         raise NotImplementedError(f"Task {main_task} is not implemented")
 
-    tokenizer: PreTrainedTokenizerFast = AutoTokenizer.from_pretrained(
-        model_name_or_dir
-    )
     config: PretrainedConfig = AutoConfig.from_pretrained(model_name_or_dir)
+    tokenizer: PreTrainedTokenizerBase = load_tokenizer(
+        model_name_or_dir, is_llama="Llama" in config.architectures[0]
+    )
     model_max_length: int = config.max_position_embeddings
     assert config.model_type in ("deberta-v2", "roberta")
 
@@ -386,6 +401,8 @@ def main():
             config=config,
             accumulation_steps=args.accumulation_steps,
             seed=seed,
+            bf16=args.bf16,
+            tune_only_cls=args.tune_only_cls,
         )
         logger.info(f"Result of seed {seed}: {result}")
         lst_results.append(result)
