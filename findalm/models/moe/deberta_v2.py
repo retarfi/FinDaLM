@@ -10,8 +10,8 @@ from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, LayerNorm, MSELoss
 from transformers import PreTrainedModel
 from transformers.modeling_outputs import (
     MaskedLMOutput,
-    TokenClassifierOutput,
     SequenceClassifierOutput,
+    TokenClassifierOutput,
 )
 from transformers.models.deberta_v2.modeling_deberta_v2 import (
     ContextPooler,
@@ -33,9 +33,9 @@ from ... import get_logger
 from .base import (
     MOE_TYPES,
     ROUTER_AUX_LOSS_COEF,
+    Skipper,
     confirm_same_weights,
     load_balancing_loss_func,
-    Skipper,
 )
 
 logger = get_logger()
@@ -561,7 +561,6 @@ class DebertaV2MoEForSequenceClassification(DebertaV2ForSequenceClassification):
             inputs_embeds=inputs_embeds,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
         )
 
         encoder_layer = outputs[0]
@@ -677,7 +676,6 @@ class DebertaV2MoEForTokenClassification(DebertaV2ForTokenClassification):
             inputs_embeds=inputs_embeds,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
         )
 
         sequence_output = outputs[0]

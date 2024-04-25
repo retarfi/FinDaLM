@@ -49,7 +49,7 @@ def freeze_except_mlp(
     else:
         raise NotImplementedError()
     avail_params: float = get_trainable_million_params(model)
-    print(f"{avail_params:.1f}M / {num_params:.1f}M params are trainable")
+    print(f"{avail_params:.2f}M / {num_params:.2f}M params are trainable")
 
 
 def freeze_except_router(
@@ -76,7 +76,7 @@ def freeze_except_router(
     else:
         raise NotImplementedError()
     avail_params: float = get_trainable_million_params(model)
-    print(f"{avail_params:.1f}M / {num_params:.1f}M params are trainable")
+    print(f"{avail_params:.2f}M / {num_params:.2f}M params are trainable")
 
 
 def freeze_except_cls(model: PreTrainedModel) -> None:
@@ -104,4 +104,4 @@ def freeze_except_cls(model: PreTrainedModel) -> None:
     else:
         raise NotImplementedError()
     avail_params: float = get_trainable_million_params(model)
-    print(f"{avail_params:.1f}M / {num_params:.1f}M params are trainable")
+    print(f"{avail_params:.2f}M / {num_params:.2f}M params are trainable")
