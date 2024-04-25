@@ -111,6 +111,8 @@ def test_resume_from_checkpoint(
         "--data_seed",
         "42",
         "--bf16",
+        "--report_to",
+        "none",
         "--output_dir",
     ]
     if pattern == "A":
@@ -165,6 +167,8 @@ def test_main_moe_stage2(model_type: str, dataset_names: str, moe_type: str) -> 
         "--data_seed",
         "42",
         "--bf16",
+        "--report_to",
+        "none",
     ]
     with patch.object(sys, "argv", ["test_pretrain.py"] + args_fixed):
         main()
