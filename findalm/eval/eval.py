@@ -20,11 +20,11 @@ from transformers import (
 )
 
 from .. import get_logger
-from ..models.tokenizer import load_tokenizer
 from ..models.moe.deberta_v2 import (
     DebertaV2MoEForSequenceClassification,
     DebertaV2MoEForTokenClassification,
 )
+from ..models.tokenizer import load_tokenizer
 from ..pretrain.moe import freeze_except_cls
 from .base import NER_LABELS, load_compute_metrics
 from .tasks import finerord, fomc, fpb, headline
@@ -51,7 +51,7 @@ class HyperParams(NamedTuple):
 class GridHyperParams(NamedTuple):
     max_epoch: tuple[int] = (10,)
     real_batch_size: tuple[int] = (16, 32)
-    lr: tuple[float] = (1e-5, 2e-5, 3e-5, 5e-5, 7e-5, 1e-4)
+    lr: tuple[float] = (1e-5, 3e-5, 1e-4, 3e-4, 1e-3, 3e-3)
 
 
 def load_datasetdict(task: str) -> DatasetDict:
