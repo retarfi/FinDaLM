@@ -94,13 +94,16 @@ def freeze_except_cls(model: PreTrainedModel) -> None:
     ):
         for _, param in model.named_parameters():
             param.requires_grad = False
+        for i in [-1, -2]:
+            for _, param in model.deberta.encoder.layer[i].named_parameters():
+                param.requires_grad = True
         model.classifier.bias.requires_grad = True
         model.classifier.weight.requires_grad = True
         if isinstance(model, DebertaV2ForSequenceClassification) or isinstance(
             model, DebertaV2MoEForSequenceClassification
         ):
-            model.pooler.bias.requires_grad = True
-            model.pooler.weight.requires_grad = True
+            model.pooler.dense.bias.requires_grad = True
+            model.pooler.dense.weight.requires_grad = True
     else:
         raise NotImplementedError()
     avail_params: float = get_trainable_million_params(model)
