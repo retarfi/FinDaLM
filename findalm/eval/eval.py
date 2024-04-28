@@ -1,4 +1,5 @@
 import argparse
+import datetime
 import itertools
 import logging
 import os
@@ -18,8 +19,8 @@ from transformers import (
     PreTrainedModel,
     PreTrainedTokenizerBase,
 )
+from transformers.trainer_callback import PrinterCallback
 
-from .. import get_logger
 from ..models.moe.deberta_v2 import (
     DebertaV2MoEForSequenceClassification,
     DebertaV2MoEForTokenClassification,
@@ -30,7 +31,6 @@ from .base import NER_LABELS, load_compute_metrics
 from .tasks import finerord, fomc, fpb, headline
 
 transformers.logging.set_verbosity(transformers.logging.log_levels["error"])
-logger: logging.RootLogger = get_logger()
 TASKS: tuple[str] = (
     "finerord",
     "fiqasa",
@@ -43,15 +43,19 @@ ROOT_DIR: Path = Path(__file__).parents[2]
 
 
 class HyperParams(NamedTuple):
-    max_epoch: int = 5
+    max_epoch: int = 10
     real_batch_size: int = 32
-    lr: float = 1e-5
+    lr: float = 1e-4
 
 
 class GridHyperParams(NamedTuple):
     max_epoch: tuple[int] = (10,)
     real_batch_size: tuple[int] = (16, 32)
-    lr: tuple[float] = (1e-5, 3e-5, 1e-4, 3e-4, 1e-3, 3e-3)
+    lr: tuple[float] = (1e-5, 2e-5, 4e-5, 8e-5, 1e-4, 2e-4, 4e-4)
+
+
+def print_with_datetime(obj: Any) -> None:
+    print(datetime.datetime.now().strftime("%Y/%m/%d %H:%M:%S"), obj)
 
 
 def load_datasetdict(task: str) -> DatasetDict:
@@ -121,6 +125,7 @@ def train(
     seed: int = 0,
     bf16: bool = False,
     tune_only_cls: bool = True,
+    disable_print_epoch: bool = False,
 ) -> dict[str, float]:
     # [key score, metrics(dict)]
     grid_results: list[dict[str, float]] = []
@@ -142,8 +147,9 @@ def train(
             eval_accumulation_steps=accumulation_steps,
             learning_rate=lr,
             num_train_epochs=max_epoch,
-            warmup_ratio=0.1,
+            warmup_ratio=0.05,
             logging_strategy="no",
+            log_on_each_node=False,
             save_strategy="no",
             seed=seed,
             report_to="none",
@@ -183,6 +189,8 @@ def train(
             tokenizer=tokenizer,
             data_collator=transformers.default_data_collator,
         )
+        if disable_print_epoch:
+            trainer.remove_callback(PrinterCallback)
         trainer.train()
 
         # Postprocess
@@ -227,6 +235,7 @@ def main():
     parser.add_argument("--do_grid", action="store_true")
     parser.add_argument("--bf16", action="store_true")
     parser.add_argument("--tune_only_cls", action="store_true")
+    parser.add_argument("--disable_print_epoch", action="store_true")
     args: argparse.Namespace = parser.parse_args()
     model_name_or_dir: str = args.model_name_or_dir
     seeds: list[int] = args.seed
@@ -258,8 +267,11 @@ def main():
         raise NotImplementedError(f"Task {main_task} is not implemented")
 
     config: PretrainedConfig = AutoConfig.from_pretrained(model_name_or_dir)
+    is_llama: bool = "llama" in model_name_or_dir or (
+        config.architectures is not None and "Llama" in config.architectures[0]
+    )
     tokenizer: PreTrainedTokenizerBase = load_tokenizer(
-        model_name_or_dir, is_llama="Llama" in config.architectures[0]
+        model_name_or_dir, is_llama=is_llama
     )
     model_max_length: int = config.max_position_embeddings
     assert config.model_type in ("deberta-v2", "roberta")
@@ -387,7 +399,7 @@ def main():
         )
     lst_results: list[dict[str, float]] = []
     for seed in seeds:
-        logger.info(f"Seed {seed}")
+        print_with_datetime(f"Seed {seed}")
         set_seed(seed)
         result: dict[str, float] = train(
             task=args.task,
@@ -403,14 +415,15 @@ def main():
             seed=seed,
             bf16=args.bf16,
             tune_only_cls=args.tune_only_cls,
+            disable_print_epoch=args.disable_print_epoch,
         )
-        logger.info(f"Result of seed {seed}: {result}")
+        print_with_datetime(f"Result of seed {seed}: {result}")
         lst_results.append(result)
     dct_results: dict[str, list[float]] = {
         metric: [r[metric] for r in lst_results] for metric in lst_results[0].keys()
     }
     ave_results: dict[str, float] = {k: np.mean(v) for k, v in dct_results.items()}
-    logger.info(f"Overall results: {ave_results}")
+    print_with_datetime(f"Overall results: {ave_results}")
     if args.mlflow_run_name is not None:
         mlflow.log_metrics(ave_results)
         mlflow.set_tags({f"all {k}s": tuple(v) for k, v in dct_results.items()})
