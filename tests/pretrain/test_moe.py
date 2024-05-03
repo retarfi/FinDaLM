@@ -11,7 +11,7 @@ from findalm.models.moe.deberta_v2 import (
 from findalm.models.moe.llama import LlamaMoEForCausalLM, load_pretrained_llama_into_moe
 from findalm.pretrain.moe import (
     freeze_except_mlp,
-    freeze_except_router,
+    freeze_except_router_and_mlp,
     get_trainable_million_params,
 )
 
@@ -52,13 +52,13 @@ def test_freeze_except_mlp(
 @pytest.mark.parametrize(
     "model_type,exclude_mlm_head, num_params,front_frozen_layers",
     [
-        ("deberta-v2", True, 0.129601, 0),
-        ("deberta-v2", False, 0.00048, 0),
+        ("deberta-v2", True, 0.166156, 0),
+        ("deberta-v2", False, 0.037035, 0),
         ("llama", False, None, 0),
         ("llama", False, None, 1),
     ],
 )
-def test_freeze_except_router(
+def test_freeze_except_router_and_mlp(
     model_type: str,
     exclude_mlm_head: bool,
     num_params: Optional[float],
@@ -74,7 +74,7 @@ def test_freeze_except_router(
         model = load_pretrained_llama_into_moe(
             LlamaMoEForCausalLM, "dense", model_names=[MAP_TEST_MODELS[model_type]] * 3
         )
-    freeze_except_router(model, exclude_mlm_head, front_frozen_layers)
+    freeze_except_router_and_mlp(model, exclude_mlm_head, front_frozen_layers)
     if num_params is not None:
         assert math.isclose(
             get_trainable_million_params(model), num_params, abs_tol=1e-6

@@ -7,11 +7,12 @@ from transformers import (
 )
 
 from ..models.moe.deberta_v2 import (
+    DebertaV2FFN,
     DebertaV2MoEForMaskedLM,
     DebertaV2MoEForSequenceClassification,
     DebertaV2MoEForTokenClassification,
 )
-from ..models.moe.llama import LlamaMoEForCausalLM
+from ..models.moe.llama import LlamaMLP, LlamaMoEForCausalLM
 
 
 def get_trainable_million_params(m: PreTrainedModel) -> float:
@@ -52,7 +53,7 @@ def freeze_except_mlp(
     print(f"{avail_params:.2f}M / {num_params:.2f}M params are trainable")
 
 
-def freeze_except_router(
+def freeze_except_router_and_mlp(
     model: PreTrainedModel, exclude_mlm_head: bool, front_frozen_layers: int
 ) -> None:
     num_params: float = get_trainable_million_params(model)
@@ -61,6 +62,23 @@ def freeze_except_router(
             param.requires_grad = False
         for i in range(front_frozen_layers, len(model.deberta.encoder.layer)):
             model.deberta.encoder.layer[i].router.weight.requires_grad = True
+            for j in range(model.num_experts):
+                if not isinstance(
+                    model.deberta.encoder.layer[i].experts[j], DebertaV2FFN
+                ):
+                    continue
+                model.deberta.encoder.layer[i].experts[
+                    j
+                ].intermediate.dense.weight.requires_grad = True
+                model.deberta.encoder.layer[i].experts[
+                    j
+                ].intermediate.dense.bias.requires_grad = True
+                model.deberta.encoder.layer[i].experts[
+                    j
+                ].output.dense.weight.requires_grad = True
+                model.deberta.encoder.layer[i].experts[
+                    j
+                ].output.dense.bias.requires_grad = True
         if exclude_mlm_head:
             model.cls.predictions.bias.requires_grad = True
             model.cls.predictions.decoder.bias.requires_grad = True
@@ -73,6 +91,12 @@ def freeze_except_router(
             param.requires_grad = False
         for i in range(front_frozen_layers, len(model.model.layers)):
             model.model.layers[i].router.weight.requires_grad = True
+            for j in range(model.num_experts):
+                if not isinstance(model.model.layers[i].experts[j], LlamaMLP):
+                    continue
+                model.model.layers[i].experts[j].gate_proj.weight.requires_grad = True
+                model.model.layers[i].experts[j].up_proj.weight.requires_grad = True
+                model.model.layers[i].experts[j].down_proj.weight.requires_grad = True
     else:
         raise NotImplementedError()
     avail_params: float = get_trainable_million_params(model)

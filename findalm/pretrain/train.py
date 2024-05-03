@@ -32,17 +32,17 @@ from ..models.base import (
     from_pretrained_with_modelforpretraining,
 )
 from ..models.llama import set_pad_token_to_model
-from ..models.tokenizer import load_tokenizer
 from ..models.moe.base import MOE_TYPES
 from ..models.moe.deberta_v2 import (
     DebertaV2MoEForMaskedLM,
     load_pretrained_deberta_v2_into_moe,
 )
 from ..models.moe.llama import LlamaMoEForCausalLM, load_pretrained_llama_into_moe
+from ..models.tokenizer import load_tokenizer
 from .configuration_utils import ProfilerCallback
 from .dataset import load_ds
 from .dataset.create import convert_sentence_to_ids
-from .moe import freeze_except_mlp, freeze_except_router
+from .moe import freeze_except_mlp, freeze_except_router_and_mlp
 
 logger = get_logger()
 
@@ -303,7 +303,9 @@ def main() -> None:
             )
         else:
             raise NotImplementedError()
-        freeze_except_router(model, exclude_mlm_head, model_args.front_frozen_layers)
+        freeze_except_router_and_mlp(
+            model, exclude_mlm_head, model_args.front_frozen_layers
+        )
     else:
         model = from_pretrained_with_modelforpretraining(
             model_args.model_type,
