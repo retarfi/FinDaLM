@@ -237,9 +237,8 @@ def main() -> None:
     # dataset
     lst_ds: list[Dataset]
     raw_dataset: Dataset
-    if pretrain_mode == PretrainMode.MOE_STAGE2 or (
-        pretrain_mode == PretrainMode.MOE_STAGE1
-        and all([x in TASKS for x in data_args.dataset_names])
+    if pretrain_mode in (PretrainMode.MOE_STAGE1, PretrainMode.MOE_STAGE2) and all(
+        [x in TASKS for x in data_args.dataset_names]
     ):
         lst_ds_text: list[Dataset] = [
             load_datasetdict(dsname)["train"] for dsname in data_args.dataset_names
