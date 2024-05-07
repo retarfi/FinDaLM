@@ -1,7 +1,6 @@
 import argparse
 import datetime
 import itertools
-import logging
 import os
 from pathlib import Path
 from typing import Any, NamedTuple, Optional, Union
