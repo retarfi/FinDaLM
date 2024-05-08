@@ -279,27 +279,41 @@ def main() -> None:
         torch_dtype = torch.bfloat16
     elif training_args.fp16:
         torch_dtype = torch.float16
+
     model: PreTrainedModel
     if pretrain_mode == PretrainMode.MOE_STAGE2:
-        assert model_args.moe_type is not None
         exclude_mlm_head: bool
         if model_args.model_type == "deberta-v2":
             exclude_mlm_head = True
-            model = load_pretrained_deberta_v2_into_moe(
-                DebertaV2MoEForMaskedLM,
-                moe_type=model_args.moe_type,
-                model_names=model_args.pretrained_model_name_or_dir,
-                torch_dtype=torch_dtype,
-            )
+            if len(model_args.pretrained_model_name_or_dir) == 1:
+                model_dir: str = model_args.pretrained_model_name_or_dir[0]
+                config: PretrainedConfig = AutoConfig.from_pretrained(model_dir)
+                assert config.architectures == ["DebertaV2MoEForMaskedLM"]
+                model = DebertaV2MoEForMaskedLM.from_pretrained(model_dir)
+            else:
+                assert model_args.moe_type is not None
+                model = load_pretrained_deberta_v2_into_moe(
+                    DebertaV2MoEForMaskedLM,
+                    moe_type=model_args.moe_type,
+                    model_names=model_args.pretrained_model_name_or_dir,
+                    torch_dtype=torch_dtype,
+                )
         elif model_args.model_type == "llama":
             exclude_mlm_head = False
-            model = load_pretrained_llama_into_moe(
-                LlamaMoEForCausalLM,
-                moe_type=model_args.moe_type,
-                model_names=model_args.pretrained_model_name_or_dir,
-                torch_dtype=torch_dtype,
-                front_frozen_layers=model_args.front_frozen_layers,
-            )
+            if len(model_args.pretrained_model_name_or_dir) == 1:
+                model_dir: str = model_args.pretrained_model_name_or_dir[0]
+                config: PretrainedConfig = AutoConfig.from_pretrained(model_dir)
+                assert config.architectures == ["LlamaMoEForCausalLM"]
+                model = LlamaMoEForCausalLM.from_pretrained(model_dir)
+            else:
+                assert model_args.moe_type is not None
+                model = load_pretrained_llama_into_moe(
+                    LlamaMoEForCausalLM,
+                    moe_type=model_args.moe_type,
+                    model_names=model_args.pretrained_model_name_or_dir,
+                    torch_dtype=torch_dtype,
+                    front_frozen_layers=model_args.front_frozen_layers,
+                )
         else:
             raise NotImplementedError()
         freeze_except_router_and_mlp(
