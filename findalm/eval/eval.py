@@ -100,6 +100,11 @@ def postprocess(
         d_tmp = {}
         for d in filter(lambda item: item["epoch"] == i, lst_epochs_result):
             d_tmp.update(d)
+        if len(d_tmp) == 0:
+            for d in filter(
+                lambda item: i - 0.2 < item["epoch"] < i + 0.2, lst_epochs_result
+            ):
+                d_tmp.update(d)
         lst_epochs_result_ordered.append(d_tmp)
     best_result: dict[str, float] = max(
         lst_epochs_result_ordered, key=lambda x: x[eval_metrics[0]]
