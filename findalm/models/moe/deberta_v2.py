@@ -1,4 +1,3 @@
-import itertools
 import re
 from collections.abc import Sequence
 from typing import Optional, Tuple, Union
@@ -56,7 +55,7 @@ def load_pretrained_deberta_v2_into_moe(
         base_cls.from_pretrained(x, torch_dtype=torch_dtype) for x in model_names
     ]
     # assert other weight is same
-    for m1, m2 in itertools.combinations(lst_models, 2):
+    for m1, m2 in zip(lst_models[:-1], lst_models[1:]):
         assert confirm_same_weights(m1.deberta.embeddings, m2.deberta.embeddings)
         for i in range(max(m1.config.num_hidden_layers, m1.config.num_hidden_layers)):
             assert confirm_same_weights(

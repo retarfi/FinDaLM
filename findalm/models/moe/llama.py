@@ -1,4 +1,3 @@
-import itertools
 import re
 import warnings
 from typing import List, Optional, Tuple, Union
@@ -47,7 +46,7 @@ def load_pretrained_llama_into_moe(
         base_cls.from_pretrained(x, torch_dtype=torch_dtype) for x in model_names
     ]
     # assert other weight is same
-    for m1, m2 in itertools.combinations(lst_models, 2):
+    for m1, m2 in zip(lst_models[:-1], lst_models[1:]):
         assert confirm_same_weights(m1.model.embed_tokens, m2.model.embed_tokens)
         for i in range(max(m1.config.num_hidden_layers, m1.config.num_hidden_layers)):
             assert confirm_same_weights(
@@ -57,6 +56,7 @@ def load_pretrained_llama_into_moe(
                 assert confirm_same_weights(
                     m1.model.layers[i].mlp, m2.model.layers[i].mlp
                 )
+        assert confirm_same_weights(m1.lm_head, m2.lm_head)
     config = lst_models[0].config
     config.num_experts = len(lst_models)
     if moe_type == "top2-skip":
