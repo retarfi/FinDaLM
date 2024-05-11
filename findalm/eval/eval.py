@@ -168,13 +168,14 @@ def train(
             # Sentence Classification Task
             if config.architectures == ["DebertaV2MoEForMaskedLM"]:
                 cls = DebertaV2MoEForSequenceClassification
-
+                config.use_router_loss = False
             else:
                 cls = AutoModelForSequenceClassification
         elif main_task in ("finerord", "ner"):
             # Token Classification Task
             if config.architectures == ["DebertaV2MoEForMaskedLM"]:
                 cls = DebertaV2MoEForTokenClassification
+                config.use_router_loss = False
             else:
                 cls = AutoModelForTokenClassification
         else:  # pragma: no cover
