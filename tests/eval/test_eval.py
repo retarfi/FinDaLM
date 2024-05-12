@@ -20,6 +20,8 @@ os.environ["WANDB_MODE"] = "offline"
         ("fpb", "deberta-v2"),
         ("headline-price", "deberta-v2"),
         ("ner", "deberta-v2"),
+        ("finerord", "t5"),
+        ("fiqasa", "t5"),
     ],
 )
 def test_main(task: str, model_type: str):

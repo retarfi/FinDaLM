@@ -38,6 +38,7 @@ from ..models.moe.deberta_v2 import (
     load_pretrained_deberta_v2_into_moe,
 )
 from ..models.moe.llama import LlamaMoEForCausalLM, load_pretrained_llama_into_moe
+from ..models.moe.t5 import T5MoEForConditionalGeneration, load_pretrained_t5_into_moe
 from ..models.tokenizer import load_tokenizer
 from .configuration_utils import ProfilerCallback
 from .dataset import load_ds
@@ -245,8 +246,17 @@ def main() -> None:
         ]
         lst_ds = [convert_sentence_to_ids(ds, tokenizer) for ds in lst_ds_text]
         raw_dataset: Dataset = concatenate_datasets(lst_ds)
-        max_length: int = min(
-            config.max_position_embeddings,
+        max_length: int
+        if model_args.model_type == "t5":
+            if hasattr(config, "n_positions"):
+                max_length = config.n_positions
+            else:
+                logger.warning("config has no n_positions, so set to 32")
+                max_length = 32
+        else:
+            max_length = config.max_position_embeddings
+        max_length = min(
+            max_length,
             max(map(len, raw_dataset["tokens"]))
             + tokenizer.num_special_tokens_to_add(pair=False),
         )
@@ -314,6 +324,22 @@ def main() -> None:
                     torch_dtype=torch_dtype,
                     front_frozen_layers=model_args.front_frozen_layers,
                 )
+        elif model_args.model_type == "t5":
+            exclude_mlm_head = False
+            if len(model_args.pretrained_model_name_or_dir) == 1:
+                model_dir: str = model_args.pretrained_model_name_or_dir[0]
+                config: PretrainedConfig = AutoConfig.from_pretrained(model_dir)
+                assert config.architectures == ["T5MoEForConditionalGeneration"]
+                model = T5MoEForConditionalGeneration.from_pretrained(model_dir)
+            else:
+                assert model_args.moe_type is not None
+                model = load_pretrained_t5_into_moe(
+                    T5MoEForConditionalGeneration,
+                    moe_type=model_args.moe_type,
+                    model_names=model_args.pretrained_model_name_or_dir,
+                    torch_dtype=torch_dtype,
+                    front_frozen_layers=model_args.front_frozen_layers,
+                )
         else:
             raise NotImplementedError()
         freeze_except_router_and_mlp(
@@ -329,7 +355,7 @@ def main() -> None:
         exclude_mlm_head: bool
         if model_args.model_type == "deberta-v2":
             exclude_mlm_head = True
-        elif model_args.model_type == "llama":
+        elif model_args.model_type in ("llama", "t5"):
             exclude_mlm_head = False
         else:
             raise NotImplementedError()

@@ -20,6 +20,7 @@ MAX_LENGTH: int = 64
     [
         ("moe-stage1", "deberta-v2", ""),
         ("moe-stage1", "llama", ""),
+        ("moe-stage1", "t5", ""),
         ("default", "deberta-v2", ""),  # model,mask
         ("default", "deberta-v2", "--is_dataset_masked"),  # model
         ("default", "deberta-v2", "--is_dataset_masked --do_eval"),  # do_eval
@@ -73,11 +74,7 @@ def test_main(pretrain_mode: str, model_type: str, args: str) -> None:
 
 @pytest.mark.parametrize(
     "pattern, expectation",
-    [
-        ("A", does_not_raise()),
-        ("B", does_not_raise()),
-        ("C", pytest.raises(ValueError)),
-    ],
+    [("A", does_not_raise()), ("B", does_not_raise())],
 )
 def test_resume_from_checkpoint(
     pattern: str, expectation: AbstractContextManager
@@ -125,8 +122,6 @@ def test_resume_from_checkpoint(
                 os.path.join(THIS_DIR, "../data/materials/model", model_type),
             ]
         )
-    elif pattern == "C":
-        args_fixed.append("../data/model/")
     with expectation:
         with patch.object(sys, "argv", ["test_pretrain.py"] + args_fixed):
             main()
@@ -137,7 +132,7 @@ def test_resume_from_checkpoint(
     [
         ("llama", "finerord", "top2-skip"),
         ("deberta-v2", "fiqasa", "top2"),
-        ("deberta-v2", "fomc", "top1"),
+        ("t5", "fomc", "top1"),
         ("llama", "ner", "top1"),
         ("deberta-v2", "headline-price", "dense"),
     ],

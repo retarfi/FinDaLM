@@ -17,6 +17,7 @@ from transformers import (
     PretrainedConfig,
     PreTrainedModel,
     PreTrainedTokenizerBase,
+    T5ForTokenClassification,
 )
 from transformers.trainer_callback import PrinterCallback
 
@@ -24,6 +25,7 @@ from ..models.moe.deberta_v2 import (
     DebertaV2MoEForSequenceClassification,
     DebertaV2MoEForTokenClassification,
 )
+from ..models.moe.t5 import T5MoEForSequenceClassification, T5MoEForTokenClassification
 from ..models.tokenizer import load_tokenizer
 from ..pretrain.moe import freeze_except_cls
 from .base import NER_LABELS, load_compute_metrics
@@ -169,6 +171,9 @@ def train(
             if config.architectures == ["DebertaV2MoEForMaskedLM"]:
                 cls = DebertaV2MoEForSequenceClassification
                 config.use_router_loss = False
+            elif config.architectures == ["T5MoEForConditionalGeneration"]:
+                cls = T5MoEForSequenceClassification
+                config.use_router_loss = False
             else:
                 cls = AutoModelForSequenceClassification
         elif main_task in ("finerord", "ner"):
@@ -176,13 +181,18 @@ def train(
             if config.architectures == ["DebertaV2MoEForMaskedLM"]:
                 cls = DebertaV2MoEForTokenClassification
                 config.use_router_loss = False
+            elif config.architectures == ["T5MoEForConditionalGeneration"]:
+                cls = T5MoEForTokenClassification
+                config.use_router_loss = False
             else:
                 cls = AutoModelForTokenClassification
         else:  # pragma: no cover
             raise NotImplementedError(f"Preprocess for {main_task} is not implemented")
         model: PreTrainedModel = cls.from_pretrained(model_name_or_dir, config=config)
+        if isinstance(model, T5ForTokenClassification):
+            model.model_parallel = False
         if tune_only_cls:
-            freeze_except_cls(model)
+            freeze_except_cls(model, tune_layers=6)
 
         # train
         trainer = transformers.Trainer(
@@ -278,8 +288,18 @@ def main():
     tokenizer: PreTrainedTokenizerBase = load_tokenizer(
         model_name_or_dir, is_llama=is_llama
     )
-    model_max_length: int = config.max_position_embeddings
-    assert config.model_type in ("deberta-v2", "roberta")
+    model_max_length: int
+    if config.model_type in ("deberta-v2", "roberta"):
+        model_max_length = config.max_position_embeddings
+    elif config.model_type == "t5":
+        if hasattr(config, "n_positions"):
+            model_max_length = config.n_positions
+        else:
+            # For test
+            print("T5Config has no attribute of n_positions, so model_max_length is set to")
+            model_max_length = 16
+    else:
+        raise NotImplementedError()
 
     # Preprocess
     config: Optional[PretrainedConfig] = None
@@ -313,7 +333,8 @@ def main():
                 if len(token_ids) == 1:
                     converted_labels.append(NER_LABELS.index(example["bio_tag"][i]))
                 elif len(token_ids) == 0:
-                    raise ValueError()
+                    converted_labels.append(NER_LABELS.index(example["bio_tag"][i]))
+                    token_ids = [tokenizer.unk_token_id]
                 else:
                     label: str = example["bio_tag"][i]
                     tags_to_add: list[str] = [label.replace("B-", "I-")] * len(
@@ -330,12 +351,14 @@ def main():
                 example["attention_mask"] = [1] * (
                     len(example["input_ids"]) + tokenizer.num_special_tokens_to_add()
                 ) + [0] * num_add_tokens
-                assert tokenizer.num_special_tokens_to_add() == 2
-                example["labels"] = (
-                    [NER_LABELS.index("O")]
-                    + converted_labels
-                    + [NER_LABELS.index("O")] * (num_add_tokens + 1)
-                )
+                labels: list[int] = []
+                if tokenizer.bos_token is not None or tokenizer.cls_token is not None:
+                    labels.append(NER_LABELS.index("O"))
+                labels.extend(converted_labels)
+                if tokenizer.eos_token is not None:
+                    labels.append(NER_LABELS.index("O"))
+                labels.extend([NER_LABELS.index("O")] * num_add_tokens)
+                example["labels"] = labels
                 example["input_ids"] = (
                     tokenizer.build_inputs_with_special_tokens(example["input_ids"])
                     + [tokenizer.pad_token_id] * num_add_tokens
@@ -345,12 +368,13 @@ def main():
                 example["input_ids"] = tokenizer.build_inputs_with_special_tokens(
                     example["input_ids"][:max_num_tokens]
                 )
-                assert tokenizer.num_special_tokens_to_add() == 2
-                example["labels"] = (
-                    [NER_LABELS.index("O")]
-                    + converted_labels[:max_num_tokens]
-                    + [NER_LABELS.index("O")]
-                )
+                labels: list[int] = []
+                if tokenizer.bos_token is not None or tokenizer.cls_token is not None:
+                    labels.append(NER_LABELS.index("O"))
+                labels.extend(converted_labels[:max_num_tokens])
+                if tokenizer.eos_token is not None:
+                    labels.append(NER_LABELS.index("O"))
+                example["labels"] = labels
                 example["attention_mask"] = [1] * len(example["input_ids"])
             else:  # pragma: no cover
                 raise ValueError()
