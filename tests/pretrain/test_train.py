@@ -73,8 +73,7 @@ def test_main(pretrain_mode: str, model_type: str, args: str) -> None:
 
 
 @pytest.mark.parametrize(
-    "pattern, expectation",
-    [("A", does_not_raise()), ("B", does_not_raise())],
+    "pattern, expectation", [("A", does_not_raise()), ("B", does_not_raise())]
 )
 def test_resume_from_checkpoint(
     pattern: str, expectation: AbstractContextManager
