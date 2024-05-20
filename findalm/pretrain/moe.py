@@ -146,9 +146,8 @@ def freeze_except_router_and_mlp(
     print(f"{avail_params:.2f}M / {num_params:.2f}M params are trainable")
 
 
-def freeze_except_cls(model: PreTrainedModel, tune_layers: int = 0) -> None:
+def freeze_layers(model: PreTrainedModel, num_freeze_layers: int) -> None:
     num_params: float = get_trainable_million_params(model)
-    layers: list[int] = list(range(-1, -tune_layers - 1, -1))
     for _, param in model.named_parameters():
         param.requires_grad = False
     if any(
@@ -162,7 +161,7 @@ def freeze_except_cls(model: PreTrainedModel, tune_layers: int = 0) -> None:
             ),
         )
     ):
-        for i in layers:
+        for i in range(num_freeze_layers, len(model.deberta.encoder.layer)):
             for _, param in model.deberta.encoder.layer[i].named_parameters():
                 param.requires_grad = True
         model.classifier.bias.requires_grad = True
@@ -189,22 +188,18 @@ def freeze_except_cls(model: PreTrainedModel, tune_layers: int = 0) -> None:
                 (T5ForSequenceClassification, T5MoEForSequenceClassification),
             )
         ):
-            model.classification.head.dense.bias.requires_grad = True
-            model.classification.head.dense.weight.requires_grad = True
-            model.classification.out_proj.bias.requires_grad = True
-            model.classification.out_proj.weight.requires_grad = True
-            for i in layers:
-                for _, param in model.transformer.encoder.layer[i].named_parameters():
+            model.classification_head.dense.bias.requires_grad = True
+            model.classification_head.dense.weight.requires_grad = True
+            for i in range(num_freeze_layers, len(model.transformer.encoder.block)):
+                for _, param in model.transformer.encoder.block[i].named_parameters():
                     param.requires_grad = True
-                for _, param in model.transformer.decoder.layer[i].named_parameters():
+                for _, param in model.transformer.decoder.block[i].named_parameters():
                     param.requires_grad = True
         else:
-            model.classification.head.dense.bias.requires_grad = True
-            model.classification.head.dense.weight.requires_grad = True
-            model.classification.out_proj.bias.requires_grad = True
-            model.classification.out_proj.weight.requires_grad = True
-            for i in layers:
-                for _, param in model.transformer.encoder.layer[i].named_parameters():
+            model.classifier.bias.requires_grad = True
+            model.classifier.weight.requires_grad = True
+            for i in range(num_freeze_layers, len(model.transformer.encoder.block)):
+                for _, param in model.transformer.encoder.block[i].named_parameters():
                     param.requires_grad = True
     else:
         raise NotImplementedError()

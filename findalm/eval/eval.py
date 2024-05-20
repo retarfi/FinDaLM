@@ -27,7 +27,7 @@ from ..models.moe.deberta_v2 import (
 )
 from ..models.moe.t5 import T5MoEForSequenceClassification, T5MoEForTokenClassification
 from ..models.tokenizer import load_tokenizer
-from ..pretrain.moe import freeze_except_cls
+from ..pretrain.moe import freeze_layers
 from .base import NER_LABELS, load_compute_metrics
 from .tasks import finerord, fomc, fpb, headline
 
@@ -130,7 +130,7 @@ def train(
     accumulation_steps: int = 1,
     seed: int = 0,
     bf16: bool = False,
-    tune_only_cls: bool = True,
+    num_freeze_layers: Optional[int] = None,
     disable_print_epoch: bool = False,
 ) -> dict[str, float]:
     # [key score, metrics(dict)]
@@ -191,8 +191,8 @@ def train(
         model: PreTrainedModel = cls.from_pretrained(model_name_or_dir, config=config)
         if isinstance(model, T5ForTokenClassification):
             model.model_parallel = False
-        if tune_only_cls:
-            freeze_except_cls(model, tune_layers=6)
+        if num_freeze_layers is not None:
+            freeze_layers(model, num_freeze_layers=num_freeze_layers)
 
         # train
         trainer = transformers.Trainer(
@@ -249,7 +249,7 @@ def main():
     parser.add_argument("--mlflow_run_name")
     parser.add_argument("--do_grid", action="store_true")
     parser.add_argument("--bf16", action="store_true")
-    parser.add_argument("--tune_only_cls", action="store_true")
+    parser.add_argument("--num_freeze_layers", type=int)
     parser.add_argument("--disable_print_epoch", action="store_true")
     args: argparse.Namespace = parser.parse_args()
     model_name_or_dir: str = args.model_name_or_dir
@@ -296,7 +296,9 @@ def main():
             model_max_length = config.n_positions
         else:
             # For test
-            print("T5Config has no attribute of n_positions, so model_max_length is set to")
+            print(
+                "T5Config has no attribute of n_positions, so model_max_length is set to"
+            )
             model_max_length = 16
     else:
         raise NotImplementedError()
@@ -443,7 +445,7 @@ def main():
             accumulation_steps=args.accumulation_steps,
             seed=seed,
             bf16=args.bf16,
-            tune_only_cls=args.tune_only_cls,
+            num_freeze_layers=args.num_freeze_layers,
             disable_print_epoch=args.disable_print_epoch,
         )
         print_with_datetime(f"Result of seed {seed}: {result}")
