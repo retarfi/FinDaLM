@@ -11,7 +11,7 @@ MAP_SUBTASK_COLUMNS: dict[str, str] = {
     "price": "Price or Not",
     "dirup": "Direction Up",
     "dirconstant": "Direction Constant",
-    "diredown": "Direction Down",
+    "dirdown": "Direction Down",
     "pastprice": "PastPrice",
     "futureprice": "FuturePrice",
     "pastnews": "PastNews",
