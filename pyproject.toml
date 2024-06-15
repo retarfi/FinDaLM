@@ -9,7 +9,7 @@ readme = "README.md"
 [tool.poetry.dependencies]
 python = "^3.9"
 transformers = "^4.40.0"
-accelerate = "^0.28.0"
+accelerate = "0.30.0"
 sentencepiece = "^0.2.0"
 datasets = "^2.18.0"
 torch = "^2.2.1"
